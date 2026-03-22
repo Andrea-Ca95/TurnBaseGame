@@ -3,12 +3,15 @@
 // Include base di Unreal
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "TBSCell.h"
+#include "TBSUnit.h"
+#include "TBSTower.h"
 #include "TBSGridManager.generated.h"
 
-// Forward declarations per evitare include inutili nell'header
-class ATBSCell;
+// Forward declaration per i materiali
 class UMaterialInterface;
-class ATBSUnit;
+class ATBSSniper;
+class ATBSBrawler;
 
 UCLASS()
 class TURNBASEGAME_API ATBSGridManager : public AActor
@@ -23,8 +26,20 @@ protected:
 	// Funzione chiamata quando l'attore entra nel mondo
 	virtual void BeginPlay() override;
 
-	// Funzione che crea l'unità iniziale solo durante il gioco
-	void SpawnInitialUnit();
+	// Crea le 3 torri sulla mappa dopo la generazione della griglia
+	void SpawnTowers();
+
+	// Cerca la cella valida più vicina a una coordinata ideale
+	ATBSCell* FindBestTowerCell(int32 IdealX, int32 IdealY) const;
+
+	// Crea le unità iniziali nelle zone di schieramento
+	void SpawnInitialUnits();
+
+	// Cerca una cella valida casuale nella zona del player umano
+	ATBSCell* FindRandomValidHumanSpawnCell(const TArray<ATBSCell*>& ReservedCells) const;
+
+	// Cerca una cella valida casuale nella zona AI
+	ATBSCell* FindRandomValidAISpawnCell(const TArray<ATBSCell*>& ReservedCells) const;
 
 public:
 	// Numero di celle sull'asse X della griglia
@@ -43,33 +58,73 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grid")
 	TSubclassOf<ATBSCell> CellClass;
 
-	// Materiale normale della cella
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
-	UMaterialInterface* DefaultCellMaterial;
-
 	// Materiale quando la cella è selezionata
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
 	UMaterialInterface* SelectedCellMaterial;
 
-	// Classe dell'unità da spawnare sulla griglia
+	// Materiale del livello 0 (acqua)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Terrain Materials")
+	UMaterialInterface* Level0Material;
+
+	// Materiale del livello 1
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Terrain Materials")
+	UMaterialInterface* Level1Material;
+
+	// Materiale del livello 2
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Terrain Materials")
+	UMaterialInterface* Level2Material;
+
+	// Materiale del livello 3
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Terrain Materials")
+	UMaterialInterface* Level3Material;
+
+	// Materiale del livello 4
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Terrain Materials")
+	UMaterialInterface* Level4Material;
+
+	// Classe base unità
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit")
 	TSubclassOf<ATBSUnit> UnitClass;
 
-	// Coordinata X iniziale dell'unità
+	// Classe Sniper
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit")
-	int32 InitialUnitX;
+	TSubclassOf<ATBSSniper> SniperClass;
 
-	// Coordinata Y iniziale dell'unità
+	// Classe Brawler
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit")
-	int32 InitialUnitY;
+	TSubclassOf<ATBSBrawler> BrawlerClass;
+
+	// Classe della torre da spawnare sulla griglia
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tower")
+	TSubclassOf<ATBSTower> TowerClass;
+
+	// Seed casuale usato per generare la mappa
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Map Generation")
+	int32 MapSeed;
+
+	// Scala del Perlin Noise
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Map Generation")
+	float NoiseScale;
+
+	// Numero massimo di livelli di altezza
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Map Generation")
+	int32 MaxHeightLevel;
 
 	// Array che contiene tutte le celle create nella griglia
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Grid")
 	TArray<ATBSCell*> SpawnedCells;
 
-	// Riferimento all'unità attualmente spawnata dal GridManager
+	// Array che contiene tutte le torri create nella mappa
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Tower")
+	TArray<ATBSTower*> SpawnedTowers;
+
+	// Unità umane spawnate
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Unit")
-	ATBSUnit* SpawnedUnit;
+	TArray<ATBSUnit*> HumanUnits;
+
+	// Unità AI spawnate
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Unit")
+	TArray<ATBSUnit*> AIUnits;
 
 	// Funzione che genera tutta la griglia
 	UFUNCTION(CallInEditor, Category = "Grid")

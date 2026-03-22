@@ -1,6 +1,6 @@
 #include "TBSGridManager.h"
-#include "TBSCell.h"
-#include "TBSUnit.h"
+#include "TBSSniper.h"
+#include "TBSBrawler.h"
 #include "Engine/World.h"
 
 // Costruttore del GridManager
@@ -9,7 +9,7 @@ ATBSGridManager::ATBSGridManager()
 	// Non serve il Tick: il manager non deve aggiornarsi ogni frame
 	PrimaryActorTick.bCanEverTick = false;
 
-	// Dimensioni iniziali della griglia
+	// Dimensioni iniziali della griglia da specifica
 	GridWidth = 25;
 	GridHeight = 25;
 
@@ -19,19 +19,33 @@ ATBSGridManager::ATBSGridManager()
 	// Usiamo direttamente la classe C++ della cella
 	CellClass = ATBSCell::StaticClass();
 
+	// Usiamo direttamente la classe C++ della torre
+	TowerClass = ATBSTower::StaticClass();
+
 	// All'inizio i materiali non sono assegnati
-	DefaultCellMaterial = nullptr;
 	SelectedCellMaterial = nullptr;
+	Level0Material = nullptr;
+	Level1Material = nullptr;
+	Level2Material = nullptr;
+	Level3Material = nullptr;
+	Level4Material = nullptr;
 
 	// Usiamo direttamente la classe C++ dell'unità
 	UnitClass = ATBSUnit::StaticClass();
 
-	// Coordinate iniziali dell'unità sulla griglia
-	InitialUnitX = 2;
-	InitialUnitY = 2;
+	// Usiamo direttamente le classi C++ delle unità concrete
+	SniperClass = ATBSSniper::StaticClass();
+	BrawlerClass = ATBSBrawler::StaticClass();
 
-	// All'inizio non esiste ancora nessuna unità spawnata
-	SpawnedUnit = nullptr;
+	// Parametri iniziali di generazione mappa
+	// -1 significa: genera un seed casuale a runtime
+	MapSeed = -1;
+
+	// Scala del Perlin Noise
+	NoiseScale = 5.0f;
+
+	// Da specifica: livelli da 0 a 4
+	MaxHeightLevel = 4;
 }
 
 // Quando il gioco inizia
@@ -42,8 +56,11 @@ void ATBSGridManager::BeginPlay()
 	// Rigenera la griglia all'avvio del gioco
 	GenerateGrid();
 
+	// Crea le torri dopo la generazione della mappa
+	SpawnTowers();
+
 	// Crea l'unità iniziale solo durante il gioco
-	SpawnInitialUnit();
+	SpawnInitialUnits();
 }
 
 // Funzione che crea tutte le celle della griglia
@@ -68,6 +85,14 @@ void ATBSGridManager::GenerateGrid()
 	// Svuoto l'array delle celle spawnate
 	SpawnedCells.Empty();
 
+	// Se il seed è -1, ne genero uno casuale
+	// Questo rende la mappa diversa a ogni esecuzione
+	int32 EffectiveSeed = MapSeed;
+	if (EffectiveSeed < 0)
+	{
+		EffectiveSeed = FMath::RandRange(0, 1000000);
+	}
+
 	// Punto di origine della griglia: la posizione del GridManager nel mondo
 	FVector Origin = GetActorLocation();
 
@@ -76,7 +101,47 @@ void ATBSGridManager::GenerateGrid()
 	{
 		for (int32 X = 0; X < GridWidth; X++)
 		{
-			// Calcolo la posizione nel mondo della cella corrente
+			// Calcolo una coordinata normalizzata per il Perlin Noise
+			float NoiseX = (static_cast<float>(X) + EffectiveSeed) / NoiseScale;
+			float NoiseY = (static_cast<float>(Y) + EffectiveSeed) / NoiseScale;
+
+			// Perlin Noise restituisce un valore tipicamente tra -1 e 1
+			float NoiseValue = FMath::PerlinNoise2D(FVector2D(NoiseX, NoiseY));
+
+			// Rimappo il valore da [-1, 1] a [0, 1]
+			float NormalizedNoise = (NoiseValue + 1.0f) * 0.5f;
+
+			// Converto il noise normalizzato in livelli discreti usando soglie manuali
+			// Questo mi permette di controllare meglio quanta acqua e quante zone alte compaiono
+			int32 GeneratedHeightLevel = 0;
+
+			if (NormalizedNoise < 0.28f)
+			{
+				// Livello 0 = acqua
+				GeneratedHeightLevel = 0;
+			}
+			else if (NormalizedNoise < 0.46f)
+			{
+				// Livello 1
+				GeneratedHeightLevel = 1;
+			}
+			else if (NormalizedNoise < 0.64f)
+			{
+				// Livello 2
+				GeneratedHeightLevel = 2;
+			}
+			else if (NormalizedNoise < 0.82f)
+			{
+				// Livello 3
+				GeneratedHeightLevel = 3;
+			}
+			else
+			{
+				// Livello 4
+				GeneratedHeightLevel = 4;
+			}
+
+			// Calcolo la posizione base della cella nel mondo
 			FVector SpawnLocation = Origin + FVector(X * CellSize, Y * CellSize, 0.0f);
 
 			// Creo la cella nel mondo
@@ -89,22 +154,51 @@ void ATBSGridManager::GenerateGrid()
 				NewCell->GridX = X;
 				NewCell->GridY = Y;
 
-				// Altezza base della cella
-				NewCell->HeightLevel = 1;
+				// Altezza generata della cella
+				NewCell->HeightLevel = GeneratedHeightLevel;
 
 				// Di default la cella è attraversabile
 				NewCell->bIsWalkable = true;
 
-				// Esempio di ostacolo fisso per test:
-				// la cella in posizione (4, 2) non sarà attraversabile
-				if (X == 4 && Y == 2)
+				// Il livello 0 rappresenta l'acqua ed è non calpestabile
+				if (NewCell->HeightLevel == 0)
 				{
 					NewCell->bIsWalkable = false;
 				}
 
-				// Assegno i materiali alla cella
-				NewCell->DefaultMaterial = DefaultCellMaterial;
+				// Assegno il materiale di selezione
 				NewCell->SelectedMaterial = SelectedCellMaterial;
+
+				// Assegno il materiale base in base al livello di altezza
+				switch (NewCell->HeightLevel)
+				{
+				case 0:
+					NewCell->BaseTerrainMaterial = Level0Material;
+					break;
+
+				case 1:
+					NewCell->BaseTerrainMaterial = Level1Material;
+					break;
+
+				case 2:
+					NewCell->BaseTerrainMaterial = Level2Material;
+					break;
+
+				case 3:
+					NewCell->BaseTerrainMaterial = Level3Material;
+					break;
+
+				case 4:
+					NewCell->BaseTerrainMaterial = Level4Material;
+					break;
+
+				default:
+					NewCell->BaseTerrainMaterial = Level1Material;
+					break;
+				}
+
+				// Aggiorno l'aspetto visivo della cella in base all'altezza
+				NewCell->UpdateVisualFromHeight(CellSize);
 
 				// Salvo la cella nell'array
 				SpawnedCells.Add(NewCell);
@@ -113,38 +207,305 @@ void ATBSGridManager::GenerateGrid()
 	}
 
 	// Messaggio di debug nel log per confermare quante celle sono state create
-	UE_LOG(LogTemp, Warning, TEXT("Griglia creata: %d celle"), SpawnedCells.Num());
+	UE_LOG(LogTemp, Warning, TEXT("Griglia creata: %d celle | Seed usato: %d"), SpawnedCells.Num(), EffectiveSeed);
 }
 
-// Funzione che crea l'unità iniziale solo durante il gioco
-void ATBSGridManager::SpawnInitialUnit()
+
+
+// Cerca la cella valida più vicina a una coordinata ideale per piazzare una torre
+ATBSCell* ATBSGridManager::FindBestTowerCell(int32 IdealX, int32 IdealY) const
 {
-	// Se la classe dell'unità non è valida, esco
-	if (!UnitClass)
+	ATBSCell* BestCell = nullptr;
+	float BestDistance = TNumericLimits<float>::Max();
+
+	// Controllo tutte le celle generate
+	for (ATBSCell* Cell : SpawnedCells)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("UnitClass non assegnata."));
+		// Se la cella non è valida, la salto
+		if (!IsValid(Cell))
+		{
+			continue;
+		}
+
+		// Una torre non può stare sull'acqua, quindi la cella deve essere walkable
+		if (!Cell->bIsWalkable)
+		{
+			continue;
+		}
+
+		// Calcolo la distanza dalla posizione ideale
+		float Distance = FVector2D::Distance(
+			FVector2D(Cell->GridX, Cell->GridY),
+			FVector2D(IdealX, IdealY)
+		);
+
+		// Tengo la cella valida più vicina alla posizione ideale
+		if (Distance < BestDistance)
+		{
+			BestDistance = Distance;
+			BestCell = Cell;
+		}
+	}
+
+	return BestCell;
+}
+
+// Crea le 3 torri sulla mappa
+void ATBSGridManager::SpawnTowers()
+{
+	// Se la classe torre non è valida, esco
+	if (!TowerClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("TowerClass non assegnata."));
 		return;
 	}
 
-	// Se esiste già una unità spawnata, la distruggo prima di crearne una nuova
-	if (IsValid(SpawnedUnit))
+	// Distruggo eventuali torri già presenti
+	for (ATBSTower* Tower : SpawnedTowers)
 	{
-		SpawnedUnit->Destroy();
-		SpawnedUnit = nullptr;
+		if (IsValid(Tower))
+		{
+			Tower->Destroy();
+		}
 	}
 
-	// Calcolo la posizione iniziale dell'unità nel mondo
-	FVector Origin = GetActorLocation();
-	FVector UnitSpawnLocation = Origin + FVector(InitialUnitX * CellSize, InitialUnitY * CellSize, 60.0f);
+	// Svuoto l'array delle torri spawnate
+	SpawnedTowers.Empty();
 
-	// Creo l'unità nel mondo
-	ATBSUnit* NewUnit = GetWorld()->SpawnActor<ATBSUnit>(UnitClass, UnitSpawnLocation, FRotator::ZeroRotator);
+	// Coordinate ideali delle 3 torri
+	TArray<FIntPoint> IdealTowerPositions;
+	IdealTowerPositions.Add(FIntPoint(12, 12));
+	IdealTowerPositions.Add(FIntPoint(5, 12));
+	IdealTowerPositions.Add(FIntPoint(19, 12));
 
-	// Se l'unità è stata creata correttamente, salvo riferimento e coordinate logiche
-	if (NewUnit)
+	// Per ogni posizione ideale cerco una cella valida vicina
+	for (const FIntPoint& IdealPos : IdealTowerPositions)
 	{
-		NewUnit->GridX = InitialUnitX;
-		NewUnit->GridY = InitialUnitY;
-		SpawnedUnit = NewUnit;
+		ATBSCell* TowerCell = FindBestTowerCell(IdealPos.X, IdealPos.Y);
+
+		// Se non trovo una cella valida, salto questa torre
+		if (!TowerCell)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Nessuna cella valida trovata per torre vicino a (%d, %d)."), IdealPos.X, IdealPos.Y);
+			continue;
+		}
+
+		// La cella della torre diventa un ostacolo fisico non calpestabile
+		TowerCell->bIsWalkable = false;
+
+		// Calcolo la posizione della torre nel mondo
+		FVector TowerLocation = TowerCell->GetActorLocation();
+
+		// Alzo la torre sopra la cella
+		TowerLocation.Z += 100.0f;
+
+		// Creo la torre nel mondo
+		ATBSTower* NewTower = GetWorld()->SpawnActor<ATBSTower>(TowerClass, TowerLocation, FRotator::ZeroRotator);
+
+		// Se la torre è stata creata correttamente, salvo coordinate e riferimento
+		if (NewTower)
+		{
+			NewTower->GridX = TowerCell->GridX;
+			NewTower->GridY = TowerCell->GridY;
+
+			SpawnedTowers.Add(NewTower);
+
+			UE_LOG(LogTemp, Warning, TEXT("Torre creata in (%d, %d)."), NewTower->GridX, NewTower->GridY);
+		}
 	}
+}
+
+// Cerca una cella valida casuale nella zona del player umano (Y = 0, 1, 2)
+ATBSCell* ATBSGridManager::FindRandomValidHumanSpawnCell(const TArray<ATBSCell*>& ReservedCells) const
+{
+	// Array temporaneo di tutte le celle valide per lo spawn umano
+	TArray<ATBSCell*> ValidCells;
+
+	for (ATBSCell* Cell : SpawnedCells)
+	{
+		if (!IsValid(Cell))
+		{
+			continue;
+		}
+
+		// Il player umano può spawnare solo nelle prime 3 righe
+		if (Cell->GridY < 0 || Cell->GridY > 2)
+		{
+			continue;
+		}
+
+		// La cella deve essere calpestabile
+		if (!Cell->bIsWalkable)
+		{
+			continue;
+		}
+
+		// Evito celle già riservate
+		if (ReservedCells.Contains(Cell))
+		{
+			continue;
+		}
+
+		ValidCells.Add(Cell);
+	}
+
+	// Se non esistono celle valide, ritorno nullptr
+	if (ValidCells.Num() == 0)
+	{
+		return nullptr;
+	}
+
+	// Scelgo una cella valida casuale
+	int32 RandomIndex = FMath::RandRange(0, ValidCells.Num() - 1);
+	return ValidCells[RandomIndex];
+}
+
+// Cerca una cella valida casuale nella zona AI (Y = 22, 23, 24)
+ATBSCell* ATBSGridManager::FindRandomValidAISpawnCell(const TArray<ATBSCell*>& ReservedCells) const
+{
+	// Array temporaneo di tutte le celle valide per lo spawn AI
+	TArray<ATBSCell*> ValidCells;
+
+	for (ATBSCell* Cell : SpawnedCells)
+	{
+		if (!IsValid(Cell))
+		{
+			continue;
+		}
+
+		// L'AI può spawnare solo nelle ultime 3 righe
+		if (Cell->GridY < 22 || Cell->GridY > 24)
+		{
+			continue;
+		}
+
+		// La cella deve essere calpestabile
+		if (!Cell->bIsWalkable)
+		{
+			continue;
+		}
+
+		// Evito celle già riservate
+		if (ReservedCells.Contains(Cell))
+		{
+			continue;
+		}
+
+		ValidCells.Add(Cell);
+	}
+
+	// Se non esistono celle valide, ritorno nullptr
+	if (ValidCells.Num() == 0)
+	{
+		return nullptr;
+	}
+
+	// Scelgo una cella valida casuale
+	int32 RandomIndex = FMath::RandRange(0, ValidCells.Num() - 1);
+	return ValidCells[RandomIndex];
+}
+
+// Crea le unità iniziali nelle zone di schieramento
+void ATBSGridManager::SpawnInitialUnits()
+{
+	// Pulisco eventuali unità umane precedenti
+	for (ATBSUnit* Unit : HumanUnits)
+	{
+		if (IsValid(Unit))
+		{
+			Unit->Destroy();
+		}
+	}
+	HumanUnits.Empty();
+
+	// Pulisco eventuali unità AI precedenti
+	for (ATBSUnit* Unit : AIUnits)
+	{
+		if (IsValid(Unit))
+		{
+			Unit->Destroy();
+		}
+	}
+	AIUnits.Empty();
+
+	// Verifico che le classi delle unità esistano
+	if (!SniperClass || !BrawlerClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SniperClass o BrawlerClass non assegnate."));
+		return;
+	}
+
+	// Celle già riservate per evitare overlap
+	TArray<ATBSCell*> ReservedCells;
+
+	// --- HUMAN SNIPER ---
+	ATBSCell* HumanSniperCell = FindRandomValidHumanSpawnCell(ReservedCells);
+	if (HumanSniperCell)
+	{
+		FVector SpawnLocation = HumanSniperCell->GetActorLocation();
+		SpawnLocation.Z += 60.0f;
+
+		ATBSSniper* HumanSniper = GetWorld()->SpawnActor<ATBSSniper>(SniperClass, SpawnLocation, FRotator::ZeroRotator);
+		if (HumanSniper)
+		{
+			HumanSniper->GridX = HumanSniperCell->GridX;
+			HumanSniper->GridY = HumanSniperCell->GridY;
+			HumanUnits.Add(HumanSniper);
+			ReservedCells.Add(HumanSniperCell);
+		}
+	}
+
+	// --- HUMAN BRAWLER ---
+	ATBSCell* HumanBrawlerCell = FindRandomValidHumanSpawnCell(ReservedCells);
+
+	if (HumanBrawlerCell)
+	{
+		FVector SpawnLocation = HumanBrawlerCell->GetActorLocation();
+		SpawnLocation.Z += 60.0f;
+
+		ATBSBrawler* HumanBrawler = GetWorld()->SpawnActor<ATBSBrawler>(BrawlerClass, SpawnLocation, FRotator::ZeroRotator);
+		if (HumanBrawler)
+		{
+			HumanBrawler->GridX = HumanBrawlerCell->GridX;
+			HumanBrawler->GridY = HumanBrawlerCell->GridY;
+			HumanUnits.Add(HumanBrawler);
+			ReservedCells.Add(HumanBrawlerCell);
+		}
+	}
+
+	// --- AI SNIPER ---
+	ATBSCell* AISniperCell = FindRandomValidAISpawnCell(ReservedCells);
+	if (AISniperCell)
+	{
+		FVector SpawnLocation = AISniperCell->GetActorLocation();
+		SpawnLocation.Z += 60.0f;
+
+		ATBSSniper* AISniper = GetWorld()->SpawnActor<ATBSSniper>(SniperClass, SpawnLocation, FRotator::ZeroRotator);
+		if (AISniper)
+		{
+			AISniper->GridX = AISniperCell->GridX;
+			AISniper->GridY = AISniperCell->GridY;
+			AIUnits.Add(AISniper);
+			ReservedCells.Add(AISniperCell);
+		}
+	}
+
+	// --- AI BRAWLER ---
+	ATBSCell* AIBrawlerCell = FindRandomValidAISpawnCell(ReservedCells);
+	if (AIBrawlerCell)
+	{
+		FVector SpawnLocation = AIBrawlerCell->GetActorLocation();
+		SpawnLocation.Z += 60.0f;
+
+		ATBSBrawler* AIBrawler = GetWorld()->SpawnActor<ATBSBrawler>(BrawlerClass, SpawnLocation, FRotator::ZeroRotator);
+		if (AIBrawler)
+		{
+			AIBrawler->GridX = AIBrawlerCell->GridX;
+			AIBrawler->GridY = AIBrawlerCell->GridY;
+			AIUnits.Add(AIBrawler);
+			ReservedCells.Add(AIBrawlerCell);
+		}
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("Unita iniziali create: Human=%d | AI=%d"), HumanUnits.Num(), AIUnits.Num());
 }

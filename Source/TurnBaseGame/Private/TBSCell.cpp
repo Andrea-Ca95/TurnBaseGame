@@ -1,47 +1,42 @@
 #include "TBSCell.h"
 #include "Components/StaticMeshComponent.h"
 #include "UObject/ConstructorHelpers.h"
-#include "Materials/MaterialInterface.h"
 
-// Costruttore dell'attore
+// Costruttore della cella
 ATBSCell::ATBSCell()
 {
-	// Non serve il Tick per una cella statica
+	// La cella non ha bisogno di Tick
 	PrimaryActorTick.bCanEverTick = false;
 
-	// Creiamo il componente mesh che rappresenta la cella
+	// Creo il componente mesh della cella
 	CellMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("CellMesh"));
 
-	// Impostiamo la mesh come RootComponent dell'attore
+	// Imposto la mesh come root dell'attore
 	RootComponent = CellMesh;
 
-	// Carichiamo il cubo base di Unreal
+	// Carico il cubo base di Unreal come mesh della cella
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMeshAsset(TEXT("/Engine/BasicShapes/Cube.Cube"));
 
-	// Se il cubo è stato trovato correttamente, lo assegniamo
+	// Se la mesh è stata trovata correttamente, la assegno
 	if (CubeMeshAsset.Succeeded())
 	{
 		CellMesh->SetStaticMesh(CubeMeshAsset.Object);
 	}
 
-	// Rendiamo il cubo una tile bassa
-	SetActorScale3D(FVector(1.0f, 1.0f, 0.1f));
+	// Rendo la tile leggermente più bassa in Z e un po' più piccola in X/Y
+	SetActorScale3D(FVector(0.95f, 0.95f, 0.1f));
 
-	// Valori iniziali della cella
+	// Valori iniziali logici
 	GridX = 0;
 	GridY = 0;
-
-	// Altezza base
 	HeightLevel = 1;
-
-	// Di default la cella è attraversabile
 	bIsWalkable = true;
 
-	// Stato iniziale di selezione
+	// All'inizio la cella non è selezionata
 	bIsSelected = false;
 
-	// Materiali inizialmente non assegnati
-	DefaultMaterial = nullptr;
+	// I materiali verranno assegnati dal GridManager
+	BaseTerrainMaterial = nullptr;
 	SelectedMaterial = nullptr;
 }
 
@@ -50,30 +45,58 @@ void ATBSCell::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Applico il materiale normale all'inizio
-	if (CellMesh && DefaultMaterial)
+	// Applico il materiale base del terreno all'avvio, se disponibile
+	if (CellMesh && BaseTerrainMaterial)
 	{
-		CellMesh->SetMaterial(0, DefaultMaterial);
+		CellMesh->SetMaterial(0, BaseTerrainMaterial);
 	}
 }
 
+// Applica o rimuove la selezione visiva della cella
 void ATBSCell::SetSelected(bool bSelected)
 {
+	// Salvo lo stato interno di selezione
 	bIsSelected = bSelected;
 
+	// Se per qualche motivo la mesh non esiste, esco
 	if (!CellMesh)
 	{
 		return;
 	}
 
-	// Se la cella è selezionata, applico il materiale di selezione
+	// Se la cella è selezionata e ho un materiale di selezione, lo applico
 	if (bIsSelected && SelectedMaterial)
 	{
 		CellMesh->SetMaterial(0, SelectedMaterial);
 	}
-	// Altrimenti rimetto il materiale normale
-	else if (DefaultMaterial)
+	// Altrimenti torno al materiale base del terreno
+	else if (BaseTerrainMaterial)
 	{
-		CellMesh->SetMaterial(0, DefaultMaterial);
+		CellMesh->SetMaterial(0, BaseTerrainMaterial);
+	}
+}
+
+// Aggiorna posizione e scala della cella in base al livello di altezza
+void ATBSCell::UpdateVisualFromHeight(float CellSize)
+{
+	// Recupero la posizione attuale della cella
+	FVector CurrentLocation = GetActorLocation();
+
+	// Calcolo una quota Z reale a partire dal livello logico
+	float HeightStep = CellSize * 0.2f;
+
+	// Imposto l'altezza nel mondo in base al livello della cella
+	CurrentLocation.Z = HeightLevel * HeightStep;
+
+	// Applico la nuova posizione
+	SetActorLocation(CurrentLocation);
+
+	// Mantengo la cella leggermente bassa ma con spessore sufficiente per leggere i dislivelli
+	SetActorScale3D(FVector(0.95f, 0.95f, 0.2f));
+
+	// Se ho un materiale terreno valido e la cella non è selezionata, lo applico
+	if (CellMesh && BaseTerrainMaterial && !bIsSelected)
+	{
+		CellMesh->SetMaterial(0, BaseTerrainMaterial);
 	}
 }

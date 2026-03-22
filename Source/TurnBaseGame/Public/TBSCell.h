@@ -1,10 +1,11 @@
 #pragma once
 
+// Include base di Unreal
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "TBSCell.generated.h"
 
-// Forward declaration per evitare include inutili
+// Forward declarations per evitare include inutili nell'header
 class UStaticMeshComponent;
 class UMaterialInterface;
 
@@ -14,49 +15,49 @@ class TURNBASEGAME_API ATBSCell : public AActor
 	GENERATED_BODY()
 
 public:
-
 	// Costruttore della cella
 	ATBSCell();
 
 protected:
-
 	// Funzione chiamata quando l'attore entra nel mondo
 	virtual void BeginPlay() override;
 
-	
-
-	// Stato di selezione della cella
+	// Stato interno di selezione della cella
 	bool bIsSelected;
 
 public:
-
-	// Mesh visiva della cella (il cubo che vedremo nella griglia)
-	UPROPERTY(VisibleAnywhere)
+	// Mesh visiva della cella
+	UPROPERTY(VisibleAnywhere, Category = "Cell")
 	UStaticMeshComponent* CellMesh;
 
 	// Coordinata X della cella nella griglia
-	UPROPERTY(EditAnywhere)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Cell")
 	int32 GridX;
 
 	// Coordinata Y della cella nella griglia
-	UPROPERTY(EditAnywhere)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Cell")
 	int32 GridY;
 
-	// Livello di altezza della cella (lo useremo per le colline)
-	UPROPERTY(EditAnywhere)
+	// Livello di altezza della cella
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Cell")
 	int32 HeightLevel;
 
-	// Indica se l'unità può camminare su questa cella
-	UPROPERTY(EditAnywhere)
+	// Indica se una unità può camminare su questa cella
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Cell")
 	bool bIsWalkable;
-	// Materiale normale della cella
-	UPROPERTY(EditAnywhere, Category = "Visual")
-	UMaterialInterface* DefaultMaterial;
+
+	// Materiale base del terreno della cella
+	// Questo dipenderà dal livello di altezza
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
+	UMaterialInterface* BaseTerrainMaterial;
 
 	// Materiale quando la cella è selezionata
-	UPROPERTY(EditAnywhere, Category = "Visual")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
 	UMaterialInterface* SelectedMaterial;
 
-	// Imposta lo stato di selezione della cella
+	// Applica o rimuove lo stato di selezione visiva della cella
 	void SetSelected(bool bSelected);
+
+	// Aggiorna aspetto e posizione della cella in base all'altezza
+	void UpdateVisualFromHeight(float CellSize);
 };
