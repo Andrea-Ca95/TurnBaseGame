@@ -29,6 +29,7 @@ ATBSGridManager::ATBSGridManager()
 	Level2Material = nullptr;
 	Level3Material = nullptr;
 	Level4Material = nullptr;
+	AttackRangeCellMaterial = nullptr;
 
 	// All'inizio i materiali delle unità non sono assegnati
 	HumanUnitMaterial = nullptr;
@@ -173,6 +174,9 @@ void ATBSGridManager::GenerateGrid()
 				// Assegno il materiale di selezione
 				NewCell->SelectedMaterial = SelectedCellMaterial;
 
+				// Assegno il materiale per i bersagli attaccabili
+				NewCell->AttackRangeMaterial = AttackRangeCellMaterial;
+
 				// Assegno il materiale base in base al livello di altezza
 				switch (NewCell->HeightLevel)
 				{
@@ -213,8 +217,6 @@ void ATBSGridManager::GenerateGrid()
 	// Messaggio di debug nel log per confermare quante celle sono state create
 	UE_LOG(LogTemp, Warning, TEXT("Griglia creata: %d celle | Seed usato: %d"), SpawnedCells.Num(), EffectiveSeed);
 }
-
-
 
 // Cerca la cella valida più vicina a una coordinata ideale per piazzare una torre
 ATBSCell* ATBSGridManager::FindBestTowerCell(int32 IdealX, int32 IdealY) const

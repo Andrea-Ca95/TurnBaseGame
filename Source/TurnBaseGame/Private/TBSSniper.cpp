@@ -21,4 +21,11 @@ ATBSSniper::ATBSSniper()
 
 	// Da specifica, lo Sniper può muoversi al massimo di 4 celle
 	MovementRange = 4;
+
+	// Statistiche da specifica
+	AttackRange = 10;
+	MinDamage = 4;
+	MaxDamage = 8;
+	MaxHealth = 20;
+	CurrentHealth = MaxHealth;
 }

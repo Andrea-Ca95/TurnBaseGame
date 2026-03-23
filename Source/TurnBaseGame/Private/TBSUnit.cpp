@@ -5,83 +5,144 @@
 // Costruttore dell'unità
 ATBSUnit::ATBSUnit()
 {
-	// Non serve il Tick per ora
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
 
-	// Creo la mesh dell'unità
 	UnitMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("UnitMesh"));
-
-	// La mesh diventa la root dell'attore
 	RootComponent = UnitMesh;
 
-	// Carico una sfera base di Unreal come mesh di default
-	// Le classi figlie potranno sostituirla
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMeshAsset(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
-
-	// Se la mesh è stata trovata correttamente, la assegno
 	if (SphereMeshAsset.Succeeded())
 	{
 		UnitMesh->SetStaticMesh(SphereMeshAsset.Object);
 	}
 
-	// Scale base dell'unità
 	NormalScale = FVector(0.4f, 0.4f, 0.4f);
 	SelectedScale = FVector(0.5f, 0.5f, 0.5f);
-
-	// Applico la scala normale iniziale
 	SetActorScale3D(NormalScale);
 
-	// Coordinate iniziali logiche
 	GridX = 0;
 	GridY = 0;
 
-	// Range base di default
 	MovementRange = 1;
 
-	// All'inizio l'unità non è selezionata
+	// Valori combat di default
+	AttackRange = 1;
+	MinDamage = 1;
+	MaxDamage = 1;
+	MaxHealth = 10;
+	CurrentHealth = MaxHealth;
+
 	bIsSelected = false;
+
+	CurrentPathIndex = 0;
+	MoveSpeed = 450.0f;
+	bIsMoving = false;
 }
 
-// Funzione chiamata quando l'unità entra nel mondo
 void ATBSUnit::BeginPlay()
 {
 	Super::BeginPlay();
 }
 
-// Funzione che sposta l'unità in una nuova cella
+void ATBSUnit::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	if (!bIsMoving || MovementPath.Num() == 0 || CurrentPathIndex >= MovementPath.Num())
+	{
+		return;
+	}
+
+	FVector TargetLocation = MovementPath[CurrentPathIndex];
+	FVector CurrentLocation = GetActorLocation();
+
+	FVector NewLocation = FMath::VInterpConstantTo(CurrentLocation, TargetLocation, DeltaTime, MoveSpeed);
+	SetActorLocation(NewLocation);
+
+	if (FVector::Dist(NewLocation, TargetLocation) < 2.0f)
+	{
+		SetActorLocation(TargetLocation);
+		CurrentPathIndex++;
+
+		if (CurrentPathIndex >= MovementPath.Num())
+		{
+			bIsMoving = false;
+			MovementPath.Empty();
+			CurrentPathIndex = 0;
+		}
+	}
+}
+
 void ATBSUnit::MoveToCell(int32 NewGridX, int32 NewGridY, const FVector& NewWorldLocation)
 {
-	// Aggiorno le coordinate logiche
 	GridX = NewGridX;
 	GridY = NewGridY;
-
-	// Sposto realmente l'attore nel mondo
 	SetActorLocation(NewWorldLocation);
 
-	// Scrivo nel log la nuova posizione
 	UE_LOG(LogTemp, Warning, TEXT("Unita spostata -> X: %d | Y: %d"), GridX, GridY);
 }
 
-// Applica o rimuove la selezione visiva dell'unità
+void ATBSUnit::StartPathMovement(int32 NewGridX, int32 NewGridY, const TArray<FVector>& PathPoints)
+{
+	GridX = NewGridX;
+	GridY = NewGridY;
+
+	MovementPath = PathPoints;
+	CurrentPathIndex = 0;
+	bIsMoving = (MovementPath.Num() > 0);
+
+	UE_LOG(LogTemp, Warning, TEXT("Movimento percorso avviato -> X: %d | Y: %d"), GridX, GridY);
+}
+
 void ATBSUnit::SetSelected(bool bSelected)
 {
-	// Salvo lo stato interno
 	bIsSelected = bSelected;
 
-	// Se l'unità è selezionata, aumento leggermente la scala
 	if (bIsSelected)
 	{
 		SetActorScale3D(SelectedScale);
 	}
 	else
 	{
-		// Altrimenti torno alla scala normale
 		SetActorScale3D(NormalScale);
 	}
 }
 
-// Restituisce il range massimo di movimento
 int32 ATBSUnit::GetMovementRange() const
 {
 	return MovementRange;
+}
+
+int32 ATBSUnit::GetAttackRange() const
+{
+	return AttackRange;
+}
+
+int32 ATBSUnit::RollDamage() const
+{
+	return FMath::RandRange(MinDamage, MaxDamage);
+}
+
+void ATBSUnit::ReceiveDamage(int32 DamageAmount)
+{
+	CurrentHealth -= DamageAmount;
+	CurrentHealth = FMath::Clamp(CurrentHealth, 0, MaxHealth);
+
+	UE_LOG(LogTemp, Warning, TEXT("Unita colpita: HP rimanenti = %d"), CurrentHealth);
+
+	if (CurrentHealth <= 0)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Unita eliminata."));
+		Destroy();
+	}
+}
+
+bool ATBSUnit::IsDead() const
+{
+	return CurrentHealth <= 0;
+}
+
+bool ATBSUnit::IsMoving() const
+{
+	return bIsMoving;
 }

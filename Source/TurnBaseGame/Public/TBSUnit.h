@@ -21,6 +21,9 @@ protected:
 	// Funzione chiamata quando l'unità entra nel mondo
 	virtual void BeginPlay() override;
 
+	// Tick usato per muovere l'unità lungo il percorso
+	virtual void Tick(float DeltaTime) override;
+
 	// Scala normale dell'unità
 	FVector NormalScale;
 
@@ -29,6 +32,18 @@ protected:
 
 	// Stato di selezione visiva
 	bool bIsSelected;
+
+	// Lista delle posizioni mondo da seguire
+	TArray<FVector> MovementPath;
+
+	// Indice del punto corrente del percorso
+	int32 CurrentPathIndex;
+
+	// Velocità di movimento dell'unità
+	float MoveSpeed;
+
+	// Indica se l'unità si sta muovendo lungo un percorso
+	bool bIsMoving;
 
 public:
 	// Mesh visiva dell'unità
@@ -47,12 +62,50 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit")
 	int32 MovementRange;
 
-	// Sposta l'unità su una nuova cella sia logicamente sia visivamente
+	// Range massimo di attacco
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat")
+	int32 AttackRange;
+
+	// Danno minimo inflitto
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat")
+	int32 MinDamage;
+
+	// Danno massimo inflitto
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat")
+	int32 MaxDamage;
+
+	// Vita massima dell'unità
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat")
+	int32 MaxHealth;
+
+	// Vita attuale dell'unità
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat")
+	int32 CurrentHealth;
+
+	// Sposta l'unità direttamente su una cella
 	void MoveToCell(int32 NewGridX, int32 NewGridY, const FVector& NewWorldLocation);
+
+	// Avvia il movimento lungo un percorso cella per cella
+	void StartPathMovement(int32 NewGridX, int32 NewGridY, const TArray<FVector>& PathPoints);
 
 	// Applica o rimuove la selezione visiva dell'unità
 	void SetSelected(bool bSelected);
 
 	// Restituisce il range massimo di movimento
 	int32 GetMovementRange() const;
+
+	// Restituisce il range massimo di attacco
+	int32 GetAttackRange() const;
+
+	// Restituisce un danno random nel range previsto
+	int32 RollDamage() const;
+
+	// Applica danno all'unità
+	void ReceiveDamage(int32 DamageAmount);
+
+	// Controlla se l'unità è morta
+	bool IsDead() const;
+
+	// Indica se l'unità si sta muovendo
+	bool IsMoving() const;
 };

@@ -25,6 +25,9 @@ protected:
 	// Stato interno di selezione della cella
 	bool bIsSelected;
 
+	// Stato interno di evidenziazione attacco
+	bool bIsAttackHighlighted;
+
 public:
 	// Mesh visiva della cella
 	UPROPERTY(VisibleAnywhere, Category = "Cell")
@@ -55,9 +58,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
 	UMaterialInterface* SelectedMaterial;
 
+	// Materiale quando la cella contiene un bersaglio attaccabile
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
+	UMaterialInterface* AttackRangeMaterial;
+
 	// Applica o rimuove lo stato di selezione visiva della cella
 	void SetSelected(bool bSelected);
 
 	// Aggiorna aspetto e posizione della cella in base all'altezza
 	void UpdateVisualFromHeight(float CellSize);
+
+	// Applica o rimuove l'evidenziazione di attacco
+	void SetAttackHighlighted(bool bHighlighted);
 };

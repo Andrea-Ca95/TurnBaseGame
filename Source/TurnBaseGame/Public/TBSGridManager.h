@@ -41,6 +41,9 @@ protected:
 	// Cerca una cella valida casuale nella zona AI
 	ATBSCell* FindRandomValidAISpawnCell(const TArray<ATBSCell*>& ReservedCells) const;
 
+	// Controlla se un bersaglio nemico è nel range di attacco dell'unità selezionata
+	bool IsEnemyInAttackRange(class ATBSUnit* Attacker, class ATBSUnit* Target) const;
+
 public:
 	// Numero di celle sull'asse X della griglia
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grid")
@@ -61,6 +64,10 @@ public:
 	// Materiale quando la cella è selezionata
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
 	UMaterialInterface* SelectedCellMaterial;
+
+	// Materiale delle celle con bersagli attaccabili
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
+	UMaterialInterface* AttackRangeCellMaterial;
 
 	// Materiale delle unità del player umano
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit Materials")

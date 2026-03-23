@@ -21,4 +21,11 @@ ATBSBrawler::ATBSBrawler()
 
 	// Da specifica, il Brawler può muoversi al massimo di 6 celle
 	MovementRange = 6;
+
+	// Statistiche da specifica
+	AttackRange = 1;
+	MinDamage = 1;
+	MaxDamage = 6;
+	MaxHealth = 40;
+	CurrentHealth = MaxHealth;
 }

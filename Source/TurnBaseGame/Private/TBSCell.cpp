@@ -38,6 +38,12 @@ ATBSCell::ATBSCell()
 	// I materiali verranno assegnati dal GridManager
 	BaseTerrainMaterial = nullptr;
 	SelectedMaterial = nullptr;
+
+	// All'inizio la cella non è evidenziata per attacco
+	bIsAttackHighlighted = false;
+
+	// I materiali verranno assegnati dal GridManager
+	AttackRangeMaterial = nullptr;
 }
 
 // Funzione chiamata quando la cella entra nel mondo
@@ -64,12 +70,17 @@ void ATBSCell::SetSelected(bool bSelected)
 		return;
 	}
 
-	// Se la cella è selezionata e ho un materiale di selezione, lo applico
+	// Priorità 1: selezione movimento
 	if (bIsSelected && SelectedMaterial)
 	{
 		CellMesh->SetMaterial(0, SelectedMaterial);
 	}
-	// Altrimenti torno al materiale base del terreno
+	// Priorità 2: attacco
+	else if (bIsAttackHighlighted && AttackRangeMaterial)
+	{
+		CellMesh->SetMaterial(0, AttackRangeMaterial);
+	}
+	// Priorità 3: materiale base del terreno
 	else if (BaseTerrainMaterial)
 	{
 		CellMesh->SetMaterial(0, BaseTerrainMaterial);
@@ -96,6 +107,35 @@ void ATBSCell::UpdateVisualFromHeight(float CellSize)
 
 	// Se ho un materiale terreno valido e la cella non è selezionata, lo applico
 	if (CellMesh && BaseTerrainMaterial && !bIsSelected)
+	{
+		CellMesh->SetMaterial(0, BaseTerrainMaterial);
+	}
+}
+
+// Applica o rimuove l'evidenziazione di attacco
+void ATBSCell::SetAttackHighlighted(bool bHighlighted)
+{
+	// Salvo lo stato interno
+	bIsAttackHighlighted = bHighlighted;
+
+	// Se la mesh non esiste, esco
+	if (!CellMesh)
+	{
+		return;
+	}
+
+	// Se la cella è selezionata per movimento, quella ha priorità visiva
+	if (bIsSelected && SelectedMaterial)
+	{
+		CellMesh->SetMaterial(0, SelectedMaterial);
+	}
+	// Se devo evidenziare l'attacco, applico il materiale di attacco
+	else if (bIsAttackHighlighted && AttackRangeMaterial)
+	{
+		CellMesh->SetMaterial(0, AttackRangeMaterial);
+	}
+	// Altrimenti torno al materiale base
+	else if (BaseTerrainMaterial)
 	{
 		CellMesh->SetMaterial(0, BaseTerrainMaterial);
 	}
