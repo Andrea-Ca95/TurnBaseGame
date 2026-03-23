@@ -30,6 +30,10 @@ ATBSGridManager::ATBSGridManager()
 	Level3Material = nullptr;
 	Level4Material = nullptr;
 
+	// All'inizio i materiali delle unità non sono assegnati
+	HumanUnitMaterial = nullptr;
+	AIUnitMaterial = nullptr;
+
 	// Usiamo direttamente la classe C++ dell'unità
 	UnitClass = ATBSUnit::StaticClass();
 
@@ -450,6 +454,11 @@ void ATBSGridManager::SpawnInitialUnits()
 		{
 			HumanSniper->GridX = HumanSniperCell->GridX;
 			HumanSniper->GridY = HumanSniperCell->GridY;
+			// Assegno il materiale del team umano
+			if (HumanUnitMaterial && HumanSniper->UnitMesh)
+			{
+				HumanSniper->UnitMesh->SetMaterial(0, HumanUnitMaterial);
+			}
 			HumanUnits.Add(HumanSniper);
 			ReservedCells.Add(HumanSniperCell);
 		}
@@ -468,6 +477,11 @@ void ATBSGridManager::SpawnInitialUnits()
 		{
 			HumanBrawler->GridX = HumanBrawlerCell->GridX;
 			HumanBrawler->GridY = HumanBrawlerCell->GridY;
+			// Assegno il materiale del team umano
+			if (HumanUnitMaterial && HumanBrawler->UnitMesh)
+			{
+				HumanBrawler->UnitMesh->SetMaterial(0, HumanUnitMaterial);
+			}
 			HumanUnits.Add(HumanBrawler);
 			ReservedCells.Add(HumanBrawlerCell);
 		}
@@ -485,6 +499,11 @@ void ATBSGridManager::SpawnInitialUnits()
 		{
 			AISniper->GridX = AISniperCell->GridX;
 			AISniper->GridY = AISniperCell->GridY;
+			// Assegno il materiale del team AI
+			if (AIUnitMaterial && AISniper->UnitMesh)
+			{
+				AISniper->UnitMesh->SetMaterial(0, AIUnitMaterial);
+			}
 			AIUnits.Add(AISniper);
 			ReservedCells.Add(AISniperCell);
 		}
@@ -502,6 +521,11 @@ void ATBSGridManager::SpawnInitialUnits()
 		{
 			AIBrawler->GridX = AIBrawlerCell->GridX;
 			AIBrawler->GridY = AIBrawlerCell->GridY;
+			// Assegno il materiale del team AI
+			if (AIUnitMaterial && AIBrawler->UnitMesh)
+			{
+				AIBrawler->UnitMesh->SetMaterial(0, AIUnitMaterial);
+			}
 			AIUnits.Add(AIBrawler);
 			ReservedCells.Add(AIBrawlerCell);
 		}

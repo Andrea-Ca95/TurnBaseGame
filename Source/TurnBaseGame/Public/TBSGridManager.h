@@ -62,6 +62,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
 	UMaterialInterface* SelectedCellMaterial;
 
+	// Materiale delle unità del player umano
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit Materials")
+	UMaterialInterface* HumanUnitMaterial;
+
+	// Materiale delle unità AI
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit Materials")
+	UMaterialInterface* AIUnitMaterial;
+
 	// Materiale del livello 0 (acqua)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Terrain Materials")
 	UMaterialInterface* Level0Material;

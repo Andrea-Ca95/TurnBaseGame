@@ -1,4 +1,5 @@
 #include "TBSPlayerController.h"
+#include "TBSGridManager.h"
 #include "TBSCell.h"
 #include "TBSUnit.h"
 #include "Camera/CameraActor.h"
@@ -78,11 +79,49 @@ void ATBSPlayerController::OnLeftMouseClick()
 
 		if (ClickedUnit)
 		{
-			// Salvo l'unità come unità attualmente selezionata
-			CurrentlySelectedUnit = ClickedUnit;
+			// Cerco il GridManager presente nel livello
+			ATBSGridManager* GridManager = nullptr;
 
-			// Scrivo nel log la posizione logica dell'unità selezionata
-			UE_LOG(LogTemp, Warning, TEXT("Unita selezionata -> X: %d | Y: %d"), ClickedUnit->GridX, ClickedUnit->GridY);
+			for (TActorIterator<ATBSGridManager> It(GetWorld()); It; ++It)
+			{
+				GridManager = *It;
+				break;
+			}
+
+			// Se non trovo il GridManager, blocco la selezione per sicurezza
+			if (!GridManager)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("GridManager non trovato."));
+				return;
+			}
+
+			// Controllo se l'unità cliccata appartiene al player umano
+			if (GridManager->HumanUnits.Contains(ClickedUnit))
+			{
+				// Se era già selezionata un'altra unità, tolgo la selezione visiva
+				if (CurrentlySelectedUnit && CurrentlySelectedUnit != ClickedUnit)
+				{
+					CurrentlySelectedUnit->SetSelected(false);
+				}
+
+				// Salvo la nuova unità come unità attualmente selezionata
+				CurrentlySelectedUnit = ClickedUnit;
+
+				// Applico la selezione visiva alla nuova unità
+				CurrentlySelectedUnit->SetSelected(true);
+
+				// Mostro il range di movimento dell'unità selezionata
+				ShowMovementRange(CurrentlySelectedUnit);
+
+				// Scrivo nel log la posizione logica dell'unità selezionata
+				UE_LOG(LogTemp, Warning, TEXT("Unita umana selezionata -> X: %d | Y: %d"), ClickedUnit->GridX, ClickedUnit->GridY);
+			}
+			else
+			{
+				// Se l'unità non è del player umano, non la seleziono
+				UE_LOG(LogTemp, Warning, TEXT("Questa unita non e controllabile dal player."));
+			}
+
 			return;
 		}
 
@@ -129,13 +168,85 @@ void ATBSPlayerController::OnLeftMouseClick()
 				// Sposto l'unità sia logicamente sia visivamente
 				CurrentlySelectedUnit->MoveToCell(ClickedCell->GridX, ClickedCell->GridY, TargetLocation);
 
+				// Tolgo la selezione visiva dall'unità dopo il movimento
+				CurrentlySelectedUnit->SetSelected(false);
+
+				// Nascondo il range di movimento dopo aver effettuato l'azione
+				HideMovementRange();
+
 				// Dopo il movimento, deseleziono l'unità
-				// così per spostarla di nuovo bisogna ricliccarla
 				CurrentlySelectedUnit = nullptr;
 
 				// Scrivo nel log che il movimento è terminato
 				UE_LOG(LogTemp, Warning, TEXT("Movimento completato: unita deselezionata."));
 			}
+		}
+	}
+}
+
+// Nasconde il range di movimento attualmente mostrato
+void ATBSPlayerController::HideMovementRange()
+{
+	for (ATBSCell* Cell : HighlightedMovementCells)
+	{
+		if (IsValid(Cell))
+		{
+			Cell->SetSelected(false);
+		}
+	}
+
+	HighlightedMovementCells.Empty();
+}
+
+// Mostra il range di movimento dell'unità selezionata
+void ATBSPlayerController::ShowMovementRange(ATBSUnit* Unit)
+{
+	// Se l'unità non è valida, esco
+	if (!Unit)
+	{
+		return;
+	}
+
+	// Prima pulisco eventuale range precedente
+	HideMovementRange();
+
+	// Cerco il GridManager presente nel livello
+	ATBSGridManager* GridManager = nullptr;
+
+	for (TActorIterator<ATBSGridManager> It(GetWorld()); It; ++It)
+	{
+		GridManager = *It;
+		break;
+	}
+
+	if (!GridManager)
+	{
+		return;
+	}
+
+	// Range massimo di movimento dell'unità
+	int32 MaxRange = Unit->GetMovementRange();
+
+	// Evidenzio tutte le celle raggiungibili in distanza Manhattan
+	for (ATBSCell* Cell : GridManager->SpawnedCells)
+	{
+		if (!IsValid(Cell))
+		{
+			continue;
+		}
+
+		// Salto celle non attraversabili
+		if (!Cell->bIsWalkable)
+		{
+			continue;
+		}
+
+		int32 Distance = FMath::Abs(Cell->GridX - Unit->GridX) + FMath::Abs(Cell->GridY - Unit->GridY);
+
+		if (Distance > 0 && Distance <= MaxRange)
+		{
+			Cell->SetSelected(true);
+			HighlightedMovementCells.Add(Cell);
 		}
 	}
 }

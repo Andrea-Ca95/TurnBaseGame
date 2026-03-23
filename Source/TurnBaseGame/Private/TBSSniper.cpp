@@ -1,5 +1,24 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
-
 #include "TBSSniper.h"
+#include "Components/StaticMeshComponent.h"
+#include "UObject/ConstructorHelpers.h"
 
+// Costruttore dello Sniper
+ATBSSniper::ATBSSniper()
+{
+	// Carico la mesh sfera base di Unreal per distinguere visivamente lo Sniper
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMeshAsset(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+
+	// Se la mesh è stata trovata correttamente e la mesh dell'unità esiste, la assegno
+	if (SphereMeshAsset.Succeeded() && UnitMesh)
+	{
+		UnitMesh->SetStaticMesh(SphereMeshAsset.Object);
+	}
+
+	// Imposto le scale specifiche dello Sniper
+	NormalScale = FVector(0.45f, 0.45f, 0.45f);
+	SelectedScale = FVector(0.65f, 0.65f, 0.65f);
+	SetActorScale3D(NormalScale);
+
+	// Da specifica, lo Sniper può muoversi al massimo di 4 celle
+	MovementRange = 4;
+}

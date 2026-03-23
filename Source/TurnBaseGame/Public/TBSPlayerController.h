@@ -36,4 +36,13 @@ protected:
 
 	// Unità attualmente selezionata
 	ATBSUnit* CurrentlySelectedUnit;
+
+	// Celle attualmente evidenziate come range di movimento
+	TArray<class ATBSCell*> HighlightedMovementCells;
+
+	// Mostra il range di movimento dell'unità selezionata
+	void ShowMovementRange(ATBSUnit* Unit);
+
+	// Nasconde il range di movimento attualmente mostrato
+	void HideMovementRange();
 };
