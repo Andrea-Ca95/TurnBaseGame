@@ -82,6 +82,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat")
 	int32 CurrentHealth;
 
+	// Indica se l'unità ha già effettuato il movimento nel turno corrente
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Turn")
+	bool bHasMovedThisTurn;
+
+	// Indica se l'unità ha già effettuato l'attacco nel turno corrente
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Turn")
+	bool bHasAttackedThisTurn;
+
 	// Sposta l'unità direttamente su una cella
 	void MoveToCell(int32 NewGridX, int32 NewGridY, const FVector& NewWorldLocation);
 
@@ -108,4 +116,22 @@ public:
 
 	// Indica se l'unità si sta muovendo
 	bool IsMoving() const;
+
+	// Segna che l'unità ha effettuato il movimento nel turno corrente
+	void MarkMoved();
+
+	// Segna che l'unità ha effettuato l'attacco nel turno corrente
+	void MarkAttacked();
+
+	// Resetta lo stato del turno dell'unità
+	void ResetTurnState();
+
+	// Controlla se l'unità può ancora muoversi
+	bool CanMoveThisTurn() const;
+
+	// Controlla se l'unità può ancora attaccare
+	bool CanAttackThisTurn() const;
+
+	// Controlla se l'unità ha finito il turno
+	bool HasFinishedTurn() const;
 };

@@ -535,3 +535,101 @@ void ATBSGridManager::SpawnInitialUnits()
 
 	UE_LOG(LogTemp, Warning, TEXT("Unita iniziali create: Human=%d | AI=%d"), HumanUnits.Num(), AIUnits.Num());
 }
+
+// Conta quante unità umane sono nella zona di cattura di una torre
+int32 ATBSGridManager::CountHumanUnitsInTowerZone(ATBSTower* Tower) const
+{
+	if (!Tower)
+	{
+		return 0;
+	}
+
+	int32 Count = 0;
+
+	for (ATBSUnit* Unit : HumanUnits)
+	{
+		if (!IsValid(Unit))
+		{
+			continue;
+		}
+
+		// Distanza "anche in diagonale" -> Chebyshev distance
+		const int32 DeltaX = FMath::Abs(Unit->GridX - Tower->GridX);
+		const int32 DeltaY = FMath::Abs(Unit->GridY - Tower->GridY);
+		const int32 Distance = FMath::Max(DeltaX, DeltaY);
+
+		if (Distance <= 2)
+		{
+			Count++;
+		}
+	}
+
+	return Count;
+}
+
+// Conta quante unità AI sono nella zona di cattura di una torre
+int32 ATBSGridManager::CountAIUnitsInTowerZone(ATBSTower* Tower) const
+{
+	if (!Tower)
+	{
+		return 0;
+	}
+
+	int32 Count = 0;
+
+	for (ATBSUnit* Unit : AIUnits)
+	{
+		if (!IsValid(Unit))
+		{
+			continue;
+		}
+
+		// Distanza "anche in diagonale" -> Chebyshev distance
+		const int32 DeltaX = FMath::Abs(Unit->GridX - Tower->GridX);
+		const int32 DeltaY = FMath::Abs(Unit->GridY - Tower->GridY);
+		const int32 Distance = FMath::Max(DeltaX, DeltaY);
+
+		if (Distance <= 2)
+		{
+			Count++;
+		}
+	}
+
+	return Count;
+}
+
+// Aggiorna lo stato di controllo di tutte le torri
+void ATBSGridManager::UpdateTowerControlStates()
+{
+	for (ATBSTower* Tower : SpawnedTowers)
+	{
+		if (!IsValid(Tower))
+		{
+			continue;
+		}
+
+		const int32 HumanCount = CountHumanUnitsInTowerZone(Tower);
+		const int32 AICount = CountAIUnitsInTowerZone(Tower);
+
+		// Caso 1: nessuna unità nella zona -> neutrale
+		if (HumanCount == 0 && AICount == 0)
+		{
+			Tower->SetNeutral();
+		}
+		// Caso 2: presenti unità di entrambi -> contesa
+		else if (HumanCount > 0 && AICount > 0)
+		{
+			Tower->SetContested();
+		}
+		// Caso 3: solo unità umane -> controllata dal player umano
+		else if (HumanCount > 0 && AICount == 0)
+		{
+			Tower->SetControlled(ETBSPlayerOwner::Human);
+		}
+		// Caso 4: solo unità AI -> controllata dalla AI
+		else if (AICount > 0 && HumanCount == 0)
+		{
+			Tower->SetControlled(ETBSPlayerOwner::AI);
+		}
+	}
+}

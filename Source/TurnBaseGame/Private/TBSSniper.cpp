@@ -19,11 +19,9 @@ ATBSSniper::ATBSSniper()
 	SelectedScale = FVector(0.65f, 0.65f, 0.65f);
 	SetActorScale3D(NormalScale);
 
-	// Da specifica, lo Sniper può muoversi al massimo di 4 celle
-	MovementRange = 4;
-
 	// Statistiche da specifica
 	AttackRange = 10;
+	MovementRange = 4;
 	MinDamage = 4;
 	MaxDamage = 8;
 	MaxHealth = 20;

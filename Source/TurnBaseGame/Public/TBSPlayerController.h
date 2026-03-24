@@ -9,6 +9,13 @@
 class ATBSCell;
 class ATBSUnit;
 
+UENUM()
+enum class ETBSTurnState : uint8
+{
+	Human,
+	AI
+};
+
 UCLASS()
 class TURNBASEGAME_API ATBSPlayerController : public APlayerController
 {
@@ -36,6 +43,9 @@ protected:
 
 	// Unità attualmente selezionata
 	ATBSUnit* CurrentlySelectedUnit;
+
+	// Unita attualmente impegnata nella propria azione di turno
+	class ATBSUnit* LockedTurnUnit;
 
 	// Celle attualmente evidenziate come range di movimento
 	TArray<class ATBSCell*> HighlightedMovementCells;
@@ -75,4 +85,49 @@ protected:
 
 	// Converte un percorso di celle in posizioni mondo
 	void BuildWorldPathFromCells(const TArray<class ATBSCell*>& PathCells, TArray<FVector>& OutWorldPath) const;
+	
+	// Stato corrente del turno di gioco
+	ETBSTurnState CurrentTurnState;
+
+	// Avvia il turno umano
+	void StartHumanTurn();
+
+	// Avvia il turno AI
+	void StartAITurn();
+
+	// Controlla se tutte le unità umane hanno concluso il turno
+	bool HaveAllHumanUnitsFinishedTurn() const;
+
+	// Numero di turni consecutivi in cui Human controlla almeno 2 torri
+	int32 HumanConsecutiveTowerControlTurns;
+
+	// Numero di turni consecutivi in cui AI controlla almeno 2 torri
+	int32 AIConsecutiveTowerControlTurns;
+
+	// Indica se la partita è terminata
+	bool bGameEnded;
+
+	// Conta quante torri sono controllate dal player umano
+	int32 CountHumanControlledTowers() const;
+
+	// Conta quante torri sono controllate dalla AI
+	int32 CountAIControlledTowers() const;
+
+	// Aggiorna la condizione di vittoria in base allo stato delle torri
+	void UpdateVictoryCondition();
+
+	// Esegue il turno della AI
+	void ExecuteAITurn();
+
+	// Esegue l'azione di una singola unità AI
+	void ExecuteSingleAIUnitTurn(class ATBSUnit* AIUnit);
+
+	// Cerca il bersaglio umano attaccabile più vicino per una unità AI
+	class ATBSUnit* FindBestHumanTargetForAI(class ATBSUnit* AIUnit) const;
+
+	// Cerca la torre più vicina che non è controllata dalla AI
+	class ATBSTower* FindBestTowerTargetForAI(class ATBSUnit* AIUnit) const;
+
+	// Cerca la migliore cella raggiungibile per avvicinarsi a una torre
+	class ATBSCell* FindBestReachableCellTowardTower(class ATBSUnit* AIUnit, class ATBSTower* TargetTower) const;
 };

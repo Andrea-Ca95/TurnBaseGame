@@ -22,16 +22,32 @@ ATBSPlayerController::ATBSPlayerController()
 	bEnableClickEvents = true;
 	bEnableMouseOverEvents = true;
 
+	// All'inizio nessuno ha ancora controllato 2 torri per turni consecutivi
+	HumanConsecutiveTowerControlTurns = 0;
+	AIConsecutiveTowerControlTurns = 0;
+
+	// All'inizio la partita non è finita
+	bGameEnded = false;
+
 	// All'inizio nessuna cella è selezionata
 	CurrentlySelectedCell = nullptr;
 
 	// All'inizio nessuna unità è selezionata
 	CurrentlySelectedUnit = nullptr;
+
+	// All'inizio nessuna unita è bloccata come unita attiva del turno
+	LockedTurnUnit = nullptr;
+
+	// All'inizio parte il turno umano
+	CurrentTurnState = ETBSTurnState::Human;
 }
 
 void ATBSPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// Avvio esplicitamente il primo turno umano
+	StartHumanTurn();
 
 	// Imposto un input mode misto: il gioco continua a ricevere input,
 	// ma posso anche usare il mouse nell'interfaccia
@@ -67,7 +83,22 @@ void ATBSPlayerController::SetupInputComponent()
 
 void ATBSPlayerController::OnLeftMouseClick()
 {
+
+	// Se la partita è finita, ignoro ogni input
+	if (bGameEnded)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("La partita e terminata."));
+		return;
+	}
+
 	FHitResult HitResult;
+
+	// Se non è il turno umano, ignoro l'input del player
+	if (CurrentTurnState != ETBSTurnState::Human)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Non e il turno del player umano."));
+		return;
+	}
 
 	// Faccio un raycast sotto il cursore del mouse
 	bool bHit = GetHitResultUnderCursor(ECC_Visibility, false, HitResult);
@@ -99,22 +130,78 @@ void ATBSPlayerController::OnLeftMouseClick()
 			// Caso 1: ho cliccato una unita umana -> selezione
 			if (GridManager->HumanUnits.Contains(ClickedUnit))
 			{
+				// Se l'unita ha già concluso la sua azione nel turno corrente, non la seleziono
+				if (ClickedUnit->HasFinishedTurn())
+				{
+					UE_LOG(LogTemp, Warning, TEXT("Questa unita ha gia concluso la sua azione nel turno."));
+					return;
+				}
+
+				// Se c'e gia una unita attiva nel turno e non e quella cliccata, non posso cambiare unita
+				if (LockedTurnUnit && LockedTurnUnit != ClickedUnit)
+				{
+					UE_LOG(LogTemp, Warning, TEXT("Devi prima concludere l'azione dell'unita attuale."));
+					return;
+				}
+
 				// Se era gia selezionata un'altra unita, tolgo la selezione visiva
 				if (CurrentlySelectedUnit && CurrentlySelectedUnit != ClickedUnit)
 				{
+					// Tolgo la selezione visiva dalla vecchia unità
 					CurrentlySelectedUnit->SetSelected(false);
+
+					// Pulisco i vecchi range mostrati sulla griglia
+					HideMovementRange();
+					HideAttackRange();
+				}
+
+				// Se clicco di nuovo la stessa unita dopo aver mosso, concludo la sua azione senza attaccare
+				if (ClickedUnit == LockedTurnUnit && ClickedUnit->CanAttackThisTurn() && !ClickedUnit->CanMoveThisTurn())
+				{
+					HideMovementRange();
+					HideAttackRange();
+
+					ClickedUnit->SetSelected(false);
+					ClickedUnit->MarkAttacked();
+
+					CurrentlySelectedUnit = nullptr;
+					LockedTurnUnit = nullptr;
+
+					UE_LOG(LogTemp, Warning, TEXT("Azione conclusa: unita fermata dopo il movimento senza attacco."));
+
+					// Se entrambe le unita umane hanno finito, passo al turno AI
+					if (HaveAllHumanUnitsFinishedTurn())
+					{
+						StartAITurn();
+					}
+
+					return;
 				}
 
 				// Salvo la nuova unita come unita attualmente selezionata
 				CurrentlySelectedUnit = ClickedUnit;
 
+				// Se non c'e ancora una unita attiva, la blocco come unita corrente del turno
+				if (!LockedTurnUnit)
+				{
+					LockedTurnUnit = ClickedUnit;
+				}
+
 				// Applico la selezione visiva alla nuova unita
 				CurrentlySelectedUnit->SetSelected(true);
 
-				// Mostro il range di movimento dell'unita selezionata
-				ShowMovementRange(CurrentlySelectedUnit);
+				// Se l'unita non ha ancora mosso, mostro anche il movimento
+				if (CurrentlySelectedUnit->CanMoveThisTurn())
+				{
+					ShowMovementRange(CurrentlySelectedUnit);
+				}
+				else
+				{
+					// Se ha gia mosso, il movimento non deve piu comparire
+					HideMovementRange();
+				}
 
-				// Mostro anche i bersagli attaccabili dell'unita selezionata
+				// Mostro sempre i bersagli attaccabili dell'unita selezionata
 				ShowAttackRange(CurrentlySelectedUnit);
 
 				// Scrivo nel log la posizione logica dell'unita selezionata
@@ -146,6 +233,9 @@ void ATBSPlayerController::OnLeftMouseClick()
 				// Applico il danno al bersaglio
 				ClickedUnit->ReceiveDamage(DamageDealt);
 
+				// Segno che l'unita ha effettuato l'attacco nel turno corrente
+				CurrentlySelectedUnit->MarkAttacked();
+
 				UE_LOG(LogTemp, Warning, TEXT("Attacco eseguito: danno inflitto = %d"), DamageDealt);
 
 				// Nascondo il range di movimento dopo l'azione
@@ -160,6 +250,14 @@ void ATBSPlayerController::OnLeftMouseClick()
 				// Deseleziono l'unita del player dopo l'attacco
 				CurrentlySelectedUnit = nullptr;
 
+				// L'unita ha concluso la propria azione, quindi non e piu bloccata come unita attiva
+				LockedTurnUnit = nullptr;
+
+				// Se entrambe le unita umane hanno finito, passo al turno AI
+				if (HaveAllHumanUnitsFinishedTurn())
+				{
+					StartAITurn();
+				}
 				return;
 			}
 
@@ -191,6 +289,12 @@ void ATBSPlayerController::OnLeftMouseClick()
 			// Se ho un'unità selezionata, provo a spostarla sulla cella cliccata
 			if (CurrentlySelectedUnit)
 			{
+				// Se l'unita ha gia mosso in questo turno, non puo muoversi di nuovo
+				if (!CurrentlySelectedUnit->CanMoveThisTurn())
+				{
+					UE_LOG(LogTemp, Warning, TEXT("Movimento bloccato: questa unita ha gia mosso nel turno."));
+					return;
+				}
 				// Prima controllo se la cella è attraversabile
 				if (!ClickedCell->bIsWalkable)
 				{
@@ -224,18 +328,23 @@ void ATBSPlayerController::OnLeftMouseClick()
 
 				// Avvio il movimento lungo il percorso
 				CurrentlySelectedUnit->StartPathMovement(ClickedCell->GridX, ClickedCell->GridY, WorldPath);
-				
-				// Nascondo il range di movimento dopo aver effettuato l'azione
+
+				// Segno che l'unita ha effettuato il movimento nel turno corrente
+				CurrentlySelectedUnit->MarkMoved();
+
+				// Nascondo il vecchio range di movimento
 				HideMovementRange();
 
-				// Tolgo la selezione visiva dall'unità dopo il movimento
-				CurrentlySelectedUnit->SetSelected(false);
+				// Nascondo il vecchio range di attacco
+				HideAttackRange();
 
-				// Dopo il movimento, deseleziono l'unità
-				CurrentlySelectedUnit = nullptr;
+				// Dopo il movimento l'unita resta selezionata, così può ancora attaccare
+				// Aggiorno solo il range di attacco dalla nuova posizione
+				ShowAttackRange(CurrentlySelectedUnit);
 
-				// Scrivo nel log che il movimento è terminato
-				UE_LOG(LogTemp, Warning, TEXT("Movimento completato: unita deselezionata."));
+				//scrivo nel log che il movimento è stato completato e che l'unita può ancora attaccare
+				UE_LOG(LogTemp, Warning, TEXT("Movimento completato: l'unita puo ancora attaccare."));
+				return;
 			}
 		}
 	}
@@ -697,4 +806,419 @@ void ATBSPlayerController::ShowAttackRange(ATBSUnit* Unit)
 			}
 		}
 	}
+}
+
+// Avvia il turno umano
+void ATBSPlayerController::StartHumanTurn()
+{
+	ATBSGridManager* GridManager = GetGridManager();
+	if (!GridManager)
+	{
+		return;
+	}
+
+	// A fine turno AI aggiorno lo stato delle torri
+	GridManager->UpdateTowerControlStates();
+
+	// Dopo l'aggiornamento delle torri controllo se qualcuno ha vinto
+	UpdateVictoryCondition();
+
+	// Se la partita è finita, non proseguo col nuovo turno umano
+	if (bGameEnded)
+	{
+		return;
+	}
+
+	// Resetto lo stato di turno delle unità umane
+	for (ATBSUnit* Unit : GridManager->HumanUnits)
+	{
+		if (IsValid(Unit))
+		{
+			Unit->ResetTurnState();
+		}
+	}
+
+	CurrentTurnState = ETBSTurnState::Human;
+
+	UE_LOG(LogTemp, Warning, TEXT("=== TURNO HUMAN ==="));
+}
+
+// Avvia il turno AI
+void ATBSPlayerController::StartAITurn()
+{
+	ATBSGridManager* GridManager = GetGridManager();
+	if (!GridManager)
+	{
+		return;
+	}
+
+	// A fine turno umano aggiorno lo stato delle torri
+	GridManager->UpdateTowerControlStates();
+
+	// Dopo l'aggiornamento delle torri controllo se qualcuno ha vinto
+	UpdateVictoryCondition();
+
+	// Se la partita è finita, non proseguo col turno AI
+	if (bGameEnded)
+	{
+		return;
+	}
+
+	CurrentTurnState = ETBSTurnState::AI;
+
+	UE_LOG(LogTemp, Warning, TEXT("=== TURNO AI ==="));
+
+	// Resetto lo stato turno delle unita AI
+	for (ATBSUnit* Unit : GridManager->AIUnits)
+	{
+		if (IsValid(Unit))
+		{
+			Unit->ResetTurnState();
+		}
+	}
+
+	// Eseguo davvero il turno AI
+	ExecuteAITurn();
+
+	UE_LOG(LogTemp, Warning, TEXT("Turno AI concluso."));
+	StartHumanTurn();
+}
+
+// Controlla se tutte le unità umane hanno concluso il turno
+bool ATBSPlayerController::HaveAllHumanUnitsFinishedTurn() const
+{
+	ATBSGridManager* GridManager = GetGridManager();
+	if (!GridManager)
+	{
+		return false;
+	}
+
+	for (ATBSUnit* Unit : GridManager->HumanUnits)
+	{
+		if (IsValid(Unit) && !Unit->HasFinishedTurn())
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+// Conta quante torri sono controllate dal player umano
+int32 ATBSPlayerController::CountHumanControlledTowers() const
+{
+	ATBSGridManager* GridManager = GetGridManager();
+	if (!GridManager)
+	{
+		return 0;
+	}
+
+	int32 Count = 0;
+
+	for (ATBSTower* Tower : GridManager->SpawnedTowers)
+	{
+		if (!IsValid(Tower))
+		{
+			continue;
+		}
+
+		if (Tower->TowerState == ETBSTowerState::Controlled &&
+			Tower->TowerOwner == ETBSPlayerOwner::Human)
+		{
+			Count++;
+		}
+	}
+
+	return Count;
+}
+
+// Conta quante torri sono controllate dalla AI
+int32 ATBSPlayerController::CountAIControlledTowers() const
+{
+	ATBSGridManager* GridManager = GetGridManager();
+	if (!GridManager)
+	{
+		return 0;
+	}
+
+	int32 Count = 0;
+
+	for (ATBSTower* Tower : GridManager->SpawnedTowers)
+	{
+		if (!IsValid(Tower))
+		{
+			continue;
+		}
+
+		if (Tower->TowerState == ETBSTowerState::Controlled &&
+			Tower->TowerOwner == ETBSPlayerOwner::AI)
+		{
+			Count++;
+		}
+	}
+
+	return Count;
+}
+
+// Aggiorna la condizione di vittoria in base allo stato delle torri
+void ATBSPlayerController::UpdateVictoryCondition()
+{
+	// Se la partita è già finita, non faccio più controlli
+	if (bGameEnded)
+	{
+		return;
+	}
+
+	const int32 HumanControlledTowers = CountHumanControlledTowers();
+	const int32 AIControlledTowers = CountAIControlledTowers();
+
+	// Aggiorno il conteggio consecutivo del player umano
+	if (HumanControlledTowers >= 2)
+	{
+		HumanConsecutiveTowerControlTurns++;
+	}
+	else
+	{
+		HumanConsecutiveTowerControlTurns = 0;
+	}
+
+	// Aggiorno il conteggio consecutivo della AI
+	if (AIControlledTowers >= 2)
+	{
+		AIConsecutiveTowerControlTurns++;
+	}
+	else
+	{
+		AIConsecutiveTowerControlTurns = 0;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("Controllo torri -> Human: %d torri | AI: %d torri"), HumanControlledTowers, AIControlledTowers);
+	UE_LOG(LogTemp, Warning, TEXT("Turni consecutivi -> Human: %d | AI: %d"), HumanConsecutiveTowerControlTurns, AIConsecutiveTowerControlTurns);
+
+	// Verifico la vittoria del player umano
+	if (HumanConsecutiveTowerControlTurns >= 2)
+	{
+		bGameEnded = true;
+		UE_LOG(LogTemp, Warning, TEXT("=== VITTORIA HUMAN ==="));
+		return;
+	}
+
+	// Verifico la vittoria della AI
+	if (AIConsecutiveTowerControlTurns >= 2)
+	{
+		bGameEnded = true;
+		UE_LOG(LogTemp, Warning, TEXT("=== VITTORIA AI ==="));
+		return;
+	}
+}
+
+// Esegue il turno completo della AI
+void ATBSPlayerController::ExecuteAITurn()
+{
+	ATBSGridManager* GridManager = GetGridManager();
+	if (!GridManager)
+	{
+		return;
+	}
+
+	for (ATBSUnit* AIUnit : GridManager->AIUnits)
+	{
+		if (!IsValid(AIUnit))
+		{
+			continue;
+		}
+
+		ExecuteSingleAIUnitTurn(AIUnit);
+	}
+}
+
+// Esegue l'azione di una singola unità AI
+void ATBSPlayerController::ExecuteSingleAIUnitTurn(ATBSUnit* AIUnit)
+{
+	if (!AIUnit || AIUnit->HasFinishedTurn())
+	{
+		return;
+	}
+
+	// 1. Se può attaccare un'unità umana, attacca subito
+	ATBSUnit* HumanTarget = FindBestHumanTargetForAI(AIUnit);
+	if (HumanTarget && AIUnit->CanAttackThisTurn())
+	{
+		const int32 DamageDealt = AIUnit->RollDamage();
+		HumanTarget->ReceiveDamage(DamageDealt);
+		AIUnit->MarkAttacked();
+
+		UE_LOG(LogTemp, Warning, TEXT("AI attacca -> danno inflitto = %d"), DamageDealt);
+		return;
+	}
+
+	// 2. Altrimenti provo a muovermi verso la torre piu vicina utile
+	if (AIUnit->CanMoveThisTurn())
+	{
+		ATBSTower* TargetTower = FindBestTowerTargetForAI(AIUnit);
+
+		if (TargetTower)
+		{
+			ATBSCell* BestCell = FindBestReachableCellTowardTower(AIUnit, TargetTower);
+
+			if (BestCell)
+			{
+				TArray<ATBSCell*> PathCells;
+				const bool bPathFound = FindPathToCell(AIUnit, BestCell, PathCells);
+
+				if (bPathFound && PathCells.Num() > 1)
+				{
+					TArray<FVector> WorldPath;
+					BuildWorldPathFromCells(PathCells, WorldPath);
+
+					AIUnit->StartPathMovement(BestCell->GridX, BestCell->GridY, WorldPath);
+					AIUnit->MarkMoved();
+
+					UE_LOG(LogTemp, Warning, TEXT("AI si muove verso torre -> X: %d | Y: %d"), BestCell->GridX, BestCell->GridY);
+				}
+			}
+		}
+	}
+
+	// 3. Dopo il movimento riprovo ad attaccare, se ora un bersaglio è nel range
+	HumanTarget = FindBestHumanTargetForAI(AIUnit);
+	if (HumanTarget && AIUnit->CanAttackThisTurn())
+	{
+		const int32 DamageDealt = AIUnit->RollDamage();
+		HumanTarget->ReceiveDamage(DamageDealt);
+		AIUnit->MarkAttacked();
+
+		UE_LOG(LogTemp, Warning, TEXT("AI attacca dopo movimento -> danno inflitto = %d"), DamageDealt);
+		return;
+	}
+
+	// 4. Se non ha attaccato ma ha mosso, chiudo comunque l'azione
+	if (AIUnit->CanAttackThisTurn() && !AIUnit->CanMoveThisTurn())
+	{
+		AIUnit->MarkAttacked();
+		UE_LOG(LogTemp, Warning, TEXT("AI conclude l'azione senza attaccare."));
+	}
+}
+
+// Cerca il bersaglio umano attaccabile più vicino per una unità AI
+ATBSUnit* ATBSPlayerController::FindBestHumanTargetForAI(ATBSUnit* AIUnit) const
+{
+	if (!AIUnit)
+	{
+		return nullptr;
+	}
+
+	ATBSGridManager* GridManager = GetGridManager();
+	if (!GridManager)
+	{
+		return nullptr;
+	}
+
+	ATBSUnit* BestTarget = nullptr;
+	int32 BestDistance = TNumericLimits<int32>::Max();
+
+	for (ATBSUnit* HumanUnit : GridManager->HumanUnits)
+	{
+		if (!IsValid(HumanUnit))
+		{
+			continue;
+		}
+
+		if (!IsEnemyInAttackRange(AIUnit, HumanUnit))
+		{
+			continue;
+		}
+
+		const int32 Distance =
+			FMath::Abs(HumanUnit->GridX - AIUnit->GridX) +
+			FMath::Abs(HumanUnit->GridY - AIUnit->GridY);
+
+		if (Distance < BestDistance)
+		{
+			BestDistance = Distance;
+			BestTarget = HumanUnit;
+		}
+	}
+
+	return BestTarget;
+}
+
+// Cerca la torre più vicina che non è controllata dalla AI
+ATBSTower* ATBSPlayerController::FindBestTowerTargetForAI(ATBSUnit* AIUnit) const
+{
+	if (!AIUnit)
+	{
+		return nullptr;
+	}
+
+	ATBSGridManager* GridManager = GetGridManager();
+	if (!GridManager)
+	{
+		return nullptr;
+	}
+
+	ATBSTower* BestTower = nullptr;
+	int32 BestDistance = TNumericLimits<int32>::Max();
+
+	for (ATBSTower* Tower : GridManager->SpawnedTowers)
+	{
+		if (!IsValid(Tower))
+		{
+			continue;
+		}
+
+		// Se la torre è già controllata dalla AI, la salto
+		if (Tower->TowerState == ETBSTowerState::Controlled &&
+			Tower->TowerOwner == ETBSPlayerOwner::AI)
+		{
+			continue;
+		}
+
+		const int32 Distance =
+			FMath::Abs(Tower->GridX - AIUnit->GridX) +
+			FMath::Abs(Tower->GridY - AIUnit->GridY);
+
+		if (Distance < BestDistance)
+		{
+			BestDistance = Distance;
+			BestTower = Tower;
+		}
+	}
+
+	return BestTower;
+}
+
+// Cerca la migliore cella raggiungibile per avvicinarsi a una torre
+ATBSCell* ATBSPlayerController::FindBestReachableCellTowardTower(ATBSUnit* AIUnit, ATBSTower* TargetTower) const
+{
+	if (!AIUnit || !TargetTower)
+	{
+		return nullptr;
+	}
+
+	TArray<ATBSCell*> ReachableCells;
+	ComputeReachableCells(AIUnit, ReachableCells);
+
+	ATBSCell* BestCell = nullptr;
+	int32 BestDistance = TNumericLimits<int32>::Max();
+
+	for (ATBSCell* Cell : ReachableCells)
+	{
+		if (!IsValid(Cell))
+		{
+			continue;
+		}
+
+		const int32 Distance =
+			FMath::Abs(TargetTower->GridX - Cell->GridX) +
+			FMath::Abs(TargetTower->GridY - Cell->GridY);
+
+		if (Distance < BestDistance)
+		{
+			BestDistance = Distance;
+			BestCell = Cell;
+		}
+	}
+
+	return BestCell;
 }

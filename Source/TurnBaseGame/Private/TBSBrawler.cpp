@@ -18,12 +18,10 @@ ATBSBrawler::ATBSBrawler()
 	NormalScale = FVector(0.35f, 0.35f, 0.35f);
 	SelectedScale = FVector(0.52f, 0.52f, 0.52f);
 	SetActorScale3D(NormalScale);
-
-	// Da specifica, il Brawler può muoversi al massimo di 6 celle
-	MovementRange = 6;
-
+	
 	// Statistiche da specifica
 	AttackRange = 1;
+	MovementRange = 6;
 	MinDamage = 1;
 	MaxDamage = 6;
 	MaxHealth = 40;

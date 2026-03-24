@@ -144,4 +144,13 @@ public:
 	// Funzione che genera tutta la griglia
 	UFUNCTION(CallInEditor, Category = "Grid")
 	void GenerateGrid();
+
+	// Aggiorna lo stato di controllo di tutte le torri
+	void UpdateTowerControlStates();
+
+	// Conta quante unità umane sono nella zona di cattura di una torre
+	int32 CountHumanUnitsInTowerZone(class ATBSTower* Tower) const;
+
+	// Conta quante unità AI sono nella zona di cattura di una torre
+	int32 CountAIUnitsInTowerZone(class ATBSTower* Tower) const;
 };
