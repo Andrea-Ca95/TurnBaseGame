@@ -68,6 +68,17 @@ void ATBSGridManager::BeginPlay()
 	SpawnInitialUnits();
 }
 
+void ATBSGridManager::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// Svuoto gli array di attori/oggetti gestiti
+	SpawnedCells.Empty();
+	SpawnedTowers.Empty();
+	HumanUnits.Empty();
+	AIUnits.Empty();
+
+	Super::EndPlay(EndPlayReason);
+}
+
 // Funzione che crea tutte le celle della griglia
 void ATBSGridManager::GenerateGrid()
 {
@@ -632,4 +643,28 @@ void ATBSGridManager::UpdateTowerControlStates()
 			Tower->SetControlled(ETBSPlayerOwner::AI);
 		}
 	}
+}
+
+// Rimuove dagli array le unità non più valide o distrutte
+void ATBSGridManager::CleanupDestroyedUnits()
+{
+	// Rimuovo le unità umane non più valide
+	for (int32 i = HumanUnits.Num() - 1; i >= 0; i--)
+	{
+		if (!IsValid(HumanUnits[i]))
+		{
+			HumanUnits.RemoveAt(i);
+		}
+	}
+
+	// Rimuovo le unità AI non più valide
+	for (int32 i = AIUnits.Num() - 1; i >= 0; i--)
+	{
+		if (!IsValid(AIUnits[i]))
+		{
+			AIUnits.RemoveAt(i);
+		}
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("Cleanup unita -> Human: %d | AI: %d"), HumanUnits.Num(), AIUnits.Num());
 }

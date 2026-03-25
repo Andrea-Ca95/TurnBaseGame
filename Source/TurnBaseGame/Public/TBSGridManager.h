@@ -26,6 +26,9 @@ protected:
 	// Funzione chiamata quando l'attore entra nel mondo
 	virtual void BeginPlay() override;
 
+	// Chiamata quando il GridManager esce dal mondo o il gioco viene chiuso
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
 	// Crea le 3 torri sulla mappa dopo la generazione della griglia
 	void SpawnTowers();
 
@@ -144,6 +147,9 @@ public:
 	// Funzione che genera tutta la griglia
 	UFUNCTION(CallInEditor, Category = "Grid")
 	void GenerateGrid();
+
+	// Rimuove dagli array le unità non più valide o distrutte
+	void CleanupDestroyedUnits();
 
 	// Aggiorna lo stato di controllo di tutte le torri
 	void UpdateTowerControlStates();

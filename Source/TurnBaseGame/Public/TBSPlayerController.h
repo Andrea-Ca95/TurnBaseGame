@@ -29,6 +29,9 @@ protected:
 	// Chiamata quando il controller entra in gioco
 	virtual void BeginPlay() override;
 
+	// Chiamata quando il controller esce dal mondo o il gioco viene chiuso
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
 	// Tick del PlayerController
 	virtual void PlayerTick(float DeltaTime) override;
 
@@ -130,4 +133,10 @@ protected:
 
 	// Cerca la migliore cella raggiungibile per avvicinarsi a una torre
 	class ATBSCell* FindBestReachableCellTowardTower(class ATBSUnit* AIUnit, class ATBSTower* TargetTower) const;
+
+	// Controlla se il player umano non ha più unità vive
+	bool HasHumanLostAllUnits() const;
+
+	// Controlla se la AI non ha più unità vive
+	bool HasAILostAllUnits() const;
 };

@@ -64,6 +64,24 @@ void ATBSPlayerController::BeginPlay()
 	}
 }
 
+void ATBSPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// Tolgo eventuali evidenziazioni residue sulla griglia
+	HideMovementRange();
+	HideAttackRange();
+
+	// Azzero i riferimenti del controller a oggetti del mondo
+	CurrentlySelectedUnit = nullptr;
+	LockedTurnUnit = nullptr;
+	CurrentlySelectedCell = nullptr;
+
+	// Svuoto gli array di celle evidenziate
+	HighlightedMovementCells.Empty();
+	HighlightedAttackCells.Empty();
+
+	Super::EndPlay(EndPlayReason);
+}
+
 void ATBSPlayerController::PlayerTick(float DeltaTime)
 {
 	Super::PlayerTick(DeltaTime);
@@ -232,6 +250,28 @@ void ATBSPlayerController::OnLeftMouseClick()
 
 				// Applico il danno al bersaglio
 				ClickedUnit->ReceiveDamage(DamageDealt);
+
+				// Pulisco eventuali riferimenti a unità distrutte
+				GridManager->CleanupDestroyedUnits();
+
+				// Controllo immediatamente se la partita è finita per eliminazione
+				UpdateVictoryCondition();
+
+				// Se la partita è finita, chiudo subito l'azione
+				if (bGameEnded)
+				{
+					HideMovementRange();
+					HideAttackRange();
+
+					if (CurrentlySelectedUnit)
+					{
+						CurrentlySelectedUnit->SetSelected(false);
+					}
+
+					CurrentlySelectedUnit = nullptr;
+					LockedTurnUnit = nullptr;
+					return;
+				}
 
 				// Segno che l'unita ha effettuato l'attacco nel turno corrente
 				CurrentlySelectedUnit->MarkAttacked();
@@ -817,6 +857,8 @@ void ATBSPlayerController::StartHumanTurn()
 		return;
 	}
 
+	GridManager->CleanupDestroyedUnits();
+
 	// A fine turno AI aggiorno lo stato delle torri
 	GridManager->UpdateTowerControlStates();
 
@@ -851,6 +893,8 @@ void ATBSPlayerController::StartAITurn()
 	{
 		return;
 	}
+
+	GridManager->CleanupDestroyedUnits();
 
 	// A fine turno umano aggiorno lo stato delle torri
 	GridManager->UpdateTowerControlStates();
@@ -969,6 +1013,21 @@ void ATBSPlayerController::UpdateVictoryCondition()
 		return;
 	}
 
+	// Controllo prima la vittoria per eliminazione totale delle unità
+	if (HasAILostAllUnits())
+	{
+		bGameEnded = true;
+		UE_LOG(LogTemp, Warning, TEXT("=== VITTORIA HUMAN PER ELIMINAZIONE ==="));
+		return;
+	}
+
+	if (HasHumanLostAllUnits())
+	{
+		bGameEnded = true;
+		UE_LOG(LogTemp, Warning, TEXT("=== VITTORIA AI PER ELIMINAZIONE ==="));
+		return;
+	}
+
 	const int32 HumanControlledTowers = CountHumanControlledTowers();
 	const int32 AIControlledTowers = CountAIControlledTowers();
 
@@ -1046,6 +1105,22 @@ void ATBSPlayerController::ExecuteSingleAIUnitTurn(ATBSUnit* AIUnit)
 	{
 		const int32 DamageDealt = AIUnit->RollDamage();
 		HumanTarget->ReceiveDamage(DamageDealt);
+
+		ATBSGridManager* GridManager = GetGridManager();
+		if (GridManager)
+		{
+			GridManager->CleanupDestroyedUnits();
+		}
+
+		// Controllo immediatamente se la partita è finita per eliminazione
+		UpdateVictoryCondition();
+
+		// Se la partita è finita, esco subito
+		if (bGameEnded)
+		{
+			return;
+		}
+
 		AIUnit->MarkAttacked();
 
 		UE_LOG(LogTemp, Warning, TEXT("AI attacca -> danno inflitto = %d"), DamageDealt);
@@ -1086,6 +1161,22 @@ void ATBSPlayerController::ExecuteSingleAIUnitTurn(ATBSUnit* AIUnit)
 	{
 		const int32 DamageDealt = AIUnit->RollDamage();
 		HumanTarget->ReceiveDamage(DamageDealt);
+
+		ATBSGridManager* GridManager = GetGridManager();
+		if (GridManager)
+		{
+			GridManager->CleanupDestroyedUnits();
+		}
+
+		// Controllo immediatamente se la partita è finita per eliminazione
+		UpdateVictoryCondition();
+
+		// Se la partita è finita, esco subito
+		if (bGameEnded)
+		{
+			return;
+		}
+
 		AIUnit->MarkAttacked();
 
 		UE_LOG(LogTemp, Warning, TEXT("AI attacca dopo movimento -> danno inflitto = %d"), DamageDealt);
@@ -1221,4 +1312,32 @@ ATBSCell* ATBSPlayerController::FindBestReachableCellTowardTower(ATBSUnit* AIUni
 	}
 
 	return BestCell;
+}
+
+// Controlla se il player umano non ha più unità vive
+bool ATBSPlayerController::HasHumanLostAllUnits() const
+{
+	// Recupero il GridManager dal livello
+	ATBSGridManager* GridManager = GetGridManager();
+	if (!GridManager)
+	{
+		return false;
+	}
+
+	// Se l'array delle unità umane è vuoto, il player umano ha perso tutte le unità
+	return GridManager->HumanUnits.Num() == 0;
+}
+
+// Controlla se la AI non ha più unità vive
+bool ATBSPlayerController::HasAILostAllUnits() const
+{
+	// Recupero il GridManager dal livello
+	ATBSGridManager* GridManager = GetGridManager();
+	if (!GridManager)
+	{
+		return false;
+	}
+
+	// Se l'array delle unità AI è vuoto, la AI ha perso tutte le unità
+	return GridManager->AIUnits.Num() == 0;
 }

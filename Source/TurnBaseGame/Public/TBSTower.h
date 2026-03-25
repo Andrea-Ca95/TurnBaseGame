@@ -5,6 +5,7 @@
 #include "TBSTower.generated.h"
 
 class UStaticMeshComponent;
+class UMaterialInterface;
 
 // Identifica quale player controlla la torre
 UENUM()
@@ -58,6 +59,22 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Tower")
 	ETBSPlayerOwner TowerOwner;
 
+	// Materiale torre neutrale
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
+	UMaterialInterface* NeutralMaterial;
+
+	// Materiale torre contesa
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
+	UMaterialInterface* ContestedMaterial;
+
+	// Materiale torre controllata dal player umano
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
+	UMaterialInterface* HumanControlledMaterial;
+
+	// Materiale torre controllata dalla AI
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
+	UMaterialInterface* AIControlledMaterial;
+
 	// Imposta la torre come neutrale
 	void SetNeutral();
 
@@ -66,4 +83,7 @@ public:
 
 	// Imposta la torre come contesa
 	void SetContested();
+
+	// Aggiorna il materiale visivo della torre in base allo stato corrente
+	void UpdateTowerVisual();
 };
