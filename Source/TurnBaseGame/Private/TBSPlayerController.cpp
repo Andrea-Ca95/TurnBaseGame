@@ -1,4 +1,7 @@
 #include "TBSPlayerController.h"
+#include "TBSHUDWidget.h"
+#include "UObject/ConstructorHelpers.h"
+#include "Blueprint/UserWidget.h"
 #include "Containers/Map.h"
 #include "TBSGridManager.h"
 #include "TBSCell.h"
@@ -40,14 +43,50 @@ ATBSPlayerController::ATBSPlayerController()
 
 	// All'inizio parte il turno umano
 	CurrentTurnState = ETBSTurnState::Human;
+
+	// All'inizio il widget HUD non è ancora stato creato
+	HUDWidgetClass = nullptr;
+	HUDWidgetInstance = nullptr;
+
+	// Cerco il Widget Blueprint della HUD creato nell'editor
+	static ConstructorHelpers::FClassFinder<UTBSHUDWidget> HUDWidgetBPClass(TEXT("/Game/UI/WBP_TBSHUD"));
+
+	// Se il widget è stato trovato correttamente, lo salvo come classe da istanziare
+	if (HUDWidgetBPClass.Succeeded())
+	{
+		HUDWidgetClass = HUDWidgetBPClass.Class;
+	}
 }
 
 void ATBSPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// Se è stata assegnata una classe widget valida, creo la HUD
+	if (HUDWidgetClass)
+	{
+		// Creo il widget usando questo PlayerController come proprietario
+		HUDWidgetInstance = CreateWidget<UTBSHUDWidget>(this, HUDWidgetClass);
+
+		// Se la creazione è andata a buon fine, lo mostro a schermo
+		if (HUDWidgetInstance)
+		{
+			HUDWidgetInstance->AddToViewport();
+
+			// Aggiorno subito il contenuto iniziale della HUD
+			HUDWidgetInstance->RefreshHUD();
+		}
+	}
+
 	// Avvio esplicitamente il primo turno umano
 	StartHumanTurn();
+
+	// Scrivo nel log le informazioni iniziali di stato gioco
+	UE_LOG(LogTemp, Warning, TEXT("Turno corrente: %s"), *GetCurrentTurnText());
+	UE_LOG(LogTemp, Warning, TEXT("Torri Human: %d"), GetHumanControlledTowerCountForUI());
+	UE_LOG(LogTemp, Warning, TEXT("Torri AI: %d"), GetAIControlledTowerCountForUI());
+	UE_LOG(LogTemp, Warning, TEXT("%s"), *GetHumanUnitsStatusText());
+	UE_LOG(LogTemp, Warning, TEXT("%s"), *GetAIUnitsStatusText());
 
 	// Imposto un input mode misto: il gioco continua a ricevere input,
 	// ma posso anche usare il mouse nell'interfaccia
@@ -256,6 +295,9 @@ void ATBSPlayerController::OnLeftMouseClick()
 
 				// Controllo immediatamente se la partita è finita per eliminazione
 				UpdateVictoryCondition();
+
+				// Aggiorno la HUD dopo l'attacco e l'eventuale cleanup
+				RefreshHUD();
 
 				// Se la partita è finita, chiudo subito l'azione
 				if (bGameEnded)
@@ -851,6 +893,11 @@ void ATBSPlayerController::ShowAttackRange(ATBSUnit* Unit)
 // Avvia il turno umano
 void ATBSPlayerController::StartHumanTurn()
 {
+	// Se la partita è già finita, non avvio un nuovo turno umano
+	if (bGameEnded)
+	{
+		return;
+	}
 	ATBSGridManager* GridManager = GetGridManager();
 	if (!GridManager)
 	{
@@ -882,6 +929,16 @@ void ATBSPlayerController::StartHumanTurn()
 
 	CurrentTurnState = ETBSTurnState::Human;
 
+	// Scrivo nel log lo stato aggiornato all'inizio del turno umano
+	UE_LOG(LogTemp, Warning, TEXT("Turno corrente: %s"), *GetCurrentTurnText());
+	UE_LOG(LogTemp, Warning, TEXT("Torri Human: %d"), GetHumanControlledTowerCountForUI());
+	UE_LOG(LogTemp, Warning, TEXT("Torri AI: %d"), GetAIControlledTowerCountForUI());
+	UE_LOG(LogTemp, Warning, TEXT("%s"), *GetHumanUnitsStatusText());
+	UE_LOG(LogTemp, Warning, TEXT("%s"), *GetAIUnitsStatusText());
+
+	// Aggiorno la HUD con il nuovo stato del gioco
+	RefreshHUD();
+
 	UE_LOG(LogTemp, Warning, TEXT("=== TURNO HUMAN ==="));
 }
 
@@ -910,6 +967,16 @@ void ATBSPlayerController::StartAITurn()
 
 	CurrentTurnState = ETBSTurnState::AI;
 
+	// Scrivo nel log lo stato aggiornato all'inizio del turno AI
+	UE_LOG(LogTemp, Warning, TEXT("Turno corrente: %s"), *GetCurrentTurnText());
+	UE_LOG(LogTemp, Warning, TEXT("Torri Human: %d"), GetHumanControlledTowerCountForUI());
+	UE_LOG(LogTemp, Warning, TEXT("Torri AI: %d"), GetAIControlledTowerCountForUI());
+	UE_LOG(LogTemp, Warning, TEXT("%s"), *GetHumanUnitsStatusText());
+	UE_LOG(LogTemp, Warning, TEXT("%s"), *GetAIUnitsStatusText());
+
+	// Aggiorno la HUD con il nuovo stato del gioco
+	RefreshHUD();
+
 	UE_LOG(LogTemp, Warning, TEXT("=== TURNO AI ==="));
 
 	// Resetto lo stato turno delle unita AI
@@ -923,6 +990,12 @@ void ATBSPlayerController::StartAITurn()
 
 	// Eseguo davvero il turno AI
 	ExecuteAITurn();
+
+	// Se la partita è finita durante il turno AI, non proseguo
+	if (bGameEnded)
+	{
+		return;
+	}
 
 	UE_LOG(LogTemp, Warning, TEXT("Turno AI concluso."));
 	StartHumanTurn();
@@ -1074,19 +1147,35 @@ void ATBSPlayerController::UpdateVictoryCondition()
 // Esegue il turno completo della AI
 void ATBSPlayerController::ExecuteAITurn()
 {
+	// Se la partita è già finita, non faccio nulla
+	if (bGameEnded)
+	{
+		return;
+	}
+
+	// Recupero il GridManager
 	ATBSGridManager* GridManager = GetGridManager();
 	if (!GridManager)
 	{
 		return;
 	}
 
+	// Faccio agire ogni unità AI valida
 	for (ATBSUnit* AIUnit : GridManager->AIUnits)
 	{
+		// Se la partita è finita durante il turno AI, esco subito
+		if (bGameEnded)
+		{
+			return;
+		}
+
+		// Se l'unità non è valida, la salto
 		if (!IsValid(AIUnit))
 		{
 			continue;
 		}
 
+		// Eseguo il turno della singola unità AI
 		ExecuteSingleAIUnitTurn(AIUnit);
 	}
 }
@@ -1094,6 +1183,11 @@ void ATBSPlayerController::ExecuteAITurn()
 // Esegue l'azione di una singola unità AI
 void ATBSPlayerController::ExecuteSingleAIUnitTurn(ATBSUnit* AIUnit)
 {
+	// Se la partita è già finita, blocco subito l'azione della AI
+	if (bGameEnded)
+	{
+		return;
+	}
 	if (!AIUnit || AIUnit->HasFinishedTurn())
 	{
 		return;
@@ -1114,6 +1208,9 @@ void ATBSPlayerController::ExecuteSingleAIUnitTurn(ATBSUnit* AIUnit)
 
 		// Controllo immediatamente se la partita è finita per eliminazione
 		UpdateVictoryCondition();
+
+		// Aggiorno la HUD dopo l'attacco della AI
+		RefreshHUD();
 
 		// Se la partita è finita, esco subito
 		if (bGameEnded)
@@ -1150,6 +1247,11 @@ void ATBSPlayerController::ExecuteSingleAIUnitTurn(ATBSUnit* AIUnit)
 					AIUnit->MarkMoved();
 
 					UE_LOG(LogTemp, Warning, TEXT("AI si muove verso torre -> X: %d | Y: %d"), BestCell->GridX, BestCell->GridY);
+					// Se la partita è finita nel frattempo, blocco subito il resto
+					if (bGameEnded)
+					{
+						return;
+					}
 				}
 			}
 		}
@@ -1170,6 +1272,9 @@ void ATBSPlayerController::ExecuteSingleAIUnitTurn(ATBSUnit* AIUnit)
 
 		// Controllo immediatamente se la partita è finita per eliminazione
 		UpdateVictoryCondition();
+
+		// Aggiorno la HUD dopo l'attacco della AI
+		RefreshHUD();
 
 		// Se la partita è finita, esco subito
 		if (bGameEnded)
@@ -1340,4 +1445,129 @@ bool ATBSPlayerController::HasAILostAllUnits() const
 
 	// Se l'array delle unità AI è vuoto, la AI ha perso tutte le unità
 	return GridManager->AIUnits.Num() == 0;
+}
+
+// Restituisce il testo del turno corrente
+FString ATBSPlayerController::GetCurrentTurnText() const
+{
+	// Se il turno corrente è umano, restituisco HUMAN
+	if (CurrentTurnState == ETBSTurnState::Human)
+	{
+		return TEXT("HUMAN");
+	}
+
+	// Altrimenti restituisco AI
+	return TEXT("AI");
+}
+
+// Restituisce il numero di torri controllate dal player umano
+int32 ATBSPlayerController::GetHumanControlledTowerCountForUI() const
+{
+	return CountHumanControlledTowers();
+}
+
+// Restituisce il numero di torri controllate dalla AI
+int32 ATBSPlayerController::GetAIControlledTowerCountForUI() const
+{
+	return CountAIControlledTowers();
+}
+
+// Restituisce un testo riassuntivo delle unità umane con HP
+FString ATBSPlayerController::GetHumanUnitsStatusText() const
+{
+	// Recupero il GridManager
+	ATBSGridManager* GridManager = GetGridManager();
+	if (!GridManager)
+	{
+		return TEXT("Human Units:\nN/A");
+	}
+
+	// Costruisco il testo finale
+	FString Result = TEXT("Human Units:\n");
+
+	// Se non ci sono unita, lo segnalo subito
+	if (GridManager->HumanUnits.Num() == 0)
+	{
+		Result += TEXT("none");
+		return Result;
+	}
+
+	// Aggiungo una riga per ogni unita valida
+	for (int32 i = 0; i < GridManager->HumanUnits.Num(); i++)
+	{
+		ATBSUnit* Unit = GridManager->HumanUnits[i];
+		if (!IsValid(Unit))
+		{
+			continue;
+		}
+
+		// Creo il testo della singola unita con HP correnti e massimi
+		Result += FString::Printf(TEXT("[%d] HP %d/%d"),
+			i + 1,
+			Unit->GetCurrentHealth(),
+			Unit->GetMaxHealth());
+
+		// Se non è l'ultima unità, vado a capo
+		if (i < GridManager->HumanUnits.Num() - 1)
+		{
+			Result += TEXT("\n");
+		}
+	}
+
+	return Result;
+}
+
+// Restituisce un testo riassuntivo delle unità AI con HP
+FString ATBSPlayerController::GetAIUnitsStatusText() const
+{
+	// Recupero il GridManager
+	ATBSGridManager* GridManager = GetGridManager();
+	if (!GridManager)
+	{
+		return TEXT("AI Units:\nN/A");
+	}
+
+	// Costruisco il testo finale
+	FString Result = TEXT("AI Units:\n");
+
+	// Se non ci sono unita, lo segnalo subito
+	if (GridManager->AIUnits.Num() == 0)
+	{
+		Result += TEXT("none");
+		return Result;
+	}
+
+	// Aggiungo una riga per ogni unita valida
+	for (int32 i = 0; i < GridManager->AIUnits.Num(); i++)
+	{
+		ATBSUnit* Unit = GridManager->AIUnits[i];
+		if (!IsValid(Unit))
+		{
+			continue;
+		}
+
+		// Creo il testo della singola unita con HP correnti e massimi
+		Result += FString::Printf(TEXT("[%d] HP %d/%d"),
+			i + 1,
+			Unit->GetCurrentHealth(),
+			Unit->GetMaxHealth());
+
+		// Se non è l'ultima unità, vado a capo
+		if (i < GridManager->AIUnits.Num() - 1)
+		{
+			Result += TEXT("\n");
+		}
+	}
+
+	return Result;
+}
+
+// Aggiorna il widget HUD se esiste
+void ATBSPlayerController::RefreshHUD()
+{
+	// Se il widget è valido, aggiorno tutti i testi
+	if (HUDWidgetInstance)
+	{
+		HUDWidgetInstance->RefreshHUD();
+	}
 }

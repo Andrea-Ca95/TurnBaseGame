@@ -108,6 +108,12 @@ public:
 	// Restituisce un danno random nel range previsto
 	int32 RollDamage() const;
 
+	// Restituisce gli HP correnti dell'unita
+	int32 GetCurrentHealth() const;
+
+	// Restituisce gli HP massimi dell'unita
+	int32 GetMaxHealth() const;
+
 	// Applica danno all'unità
 	void ReceiveDamage(int32 DamageAmount);
 

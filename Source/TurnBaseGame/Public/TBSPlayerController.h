@@ -25,6 +25,21 @@ public:
 	// Costruttore del PlayerController
 	ATBSPlayerController();
 
+	// Restituisce il testo del turno corrente
+	FString GetCurrentTurnText() const;
+
+	// Restituisce il numero di torri controllate dal player umano
+	int32 GetHumanControlledTowerCountForUI() const;
+
+	// Restituisce il numero di torri controllate dalla AI
+	int32 GetAIControlledTowerCountForUI() const;
+
+	// Restituisce un testo riassuntivo delle unità umane con HP
+	FString GetHumanUnitsStatusText() const;
+
+	// Restituisce un testo riassuntivo delle unità AI con HP
+	FString GetAIUnitsStatusText() const;
+
 protected:
 	// Chiamata quando il controller entra in gioco
 	virtual void BeginPlay() override;
@@ -139,4 +154,15 @@ protected:
 
 	// Controlla se la AI non ha più unità vive
 	bool HasAILostAllUnits() const;
+
+	// Classe del widget HUD da creare a schermo
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI")
+	TSubclassOf<class UTBSHUDWidget> HUDWidgetClass;
+
+	// Istanza del widget HUD attualmente mostrato
+	UPROPERTY()
+	class UTBSHUDWidget* HUDWidgetInstance;
+
+	// Aggiorna il widget HUD se esiste
+	void RefreshHUD();
 };

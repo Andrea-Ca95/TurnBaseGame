@@ -270,3 +270,15 @@ bool ATBSUnit::HasFinishedTurn() const
 	// Dopo il movimento l'unita resta selezionabile per poter ancora attaccare.
 	return bHasAttackedThisTurn;
 }
+
+// Restituisce gli HP correnti dell'unita
+int32 ATBSUnit::GetCurrentHealth() const
+{
+	return CurrentHealth;
+}
+
+// Restituisce gli HP massimi dell'unita
+int32 ATBSUnit::GetMaxHealth() const
+{
+	return MaxHealth;
+}
