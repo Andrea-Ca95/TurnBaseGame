@@ -6,6 +6,8 @@
 #include "TBSGridManager.h"
 #include "TBSCell.h"
 #include "TBSUnit.h"
+#include "TBSSniper.h"
+#include "TBSBrawler.h"
 #include "Camera/CameraActor.h"
 #include "Engine/World.h"
 #include "Engine/EngineTypes.h"
@@ -289,6 +291,18 @@ void ATBSPlayerController::OnLeftMouseClick()
 
 				// Applico il danno al bersaglio
 				ClickedUnit->ReceiveDamage(DamageDealt);
+
+				// Controllo se il difensore può infliggere un contrattacco
+				if (ShouldTriggerCounterattack(CurrentlySelectedUnit, ClickedUnit))
+				{
+					// Danno da contrattacco da specifica: random tra 1 e 3
+					const int32 CounterDamage = FMath::RandRange(1, 3);
+
+					// Applico il danno da contrattacco all'attaccante
+					CurrentlySelectedUnit->ReceiveDamage(CounterDamage);
+
+					UE_LOG(LogTemp, Warning, TEXT("Contrattacco subito -> danno ricevuto = %d"), CounterDamage);
+				}
 
 				// Pulisco eventuali riferimenti a unità distrutte
 				GridManager->CleanupDestroyedUnits();
@@ -1200,6 +1214,18 @@ void ATBSPlayerController::ExecuteSingleAIUnitTurn(ATBSUnit* AIUnit)
 		const int32 DamageDealt = AIUnit->RollDamage();
 		HumanTarget->ReceiveDamage(DamageDealt);
 
+		// Controllo se il bersaglio umano può infliggere un contrattacco
+		if (ShouldTriggerCounterattack(AIUnit, HumanTarget))
+		{
+			// Danno da contrattacco da specifica: random tra 1 e 3
+			const int32 CounterDamage = FMath::RandRange(1, 3);
+
+			// Applico il danno da contrattacco all'attaccante AI
+			AIUnit->ReceiveDamage(CounterDamage);
+
+			UE_LOG(LogTemp, Warning, TEXT("AI subisce contrattacco -> danno ricevuto = %d"), CounterDamage);
+		}
+
 		ATBSGridManager* GridManager = GetGridManager();
 		if (GridManager)
 		{
@@ -1263,6 +1289,18 @@ void ATBSPlayerController::ExecuteSingleAIUnitTurn(ATBSUnit* AIUnit)
 	{
 		const int32 DamageDealt = AIUnit->RollDamage();
 		HumanTarget->ReceiveDamage(DamageDealt);
+
+		// Controllo se il bersaglio umano può infliggere un contrattacco
+		if (ShouldTriggerCounterattack(AIUnit, HumanTarget))
+		{
+			// Danno da contrattacco da specifica: random tra 1 e 3
+			const int32 CounterDamage = FMath::RandRange(1, 3);
+
+			// Applico il danno da contrattacco all'attaccante AI
+			AIUnit->ReceiveDamage(CounterDamage);
+
+			UE_LOG(LogTemp, Warning, TEXT("AI subisce contrattacco -> danno ricevuto = %d"), CounterDamage);
+		}
 
 		ATBSGridManager* GridManager = GetGridManager();
 		if (GridManager)
@@ -1570,4 +1608,39 @@ void ATBSPlayerController::RefreshHUD()
 	{
 		HUDWidgetInstance->RefreshHUD();
 	}
+}
+
+// Controlla se dopo un attacco dello Sniper deve scattare il contrattacco
+bool ATBSPlayerController::ShouldTriggerCounterattack(ATBSUnit* Attacker, ATBSUnit* Defender) const
+{
+	// Se uno dei due riferimenti non è valido, niente contrattacco
+	if (!Attacker || !Defender)
+	{
+		return false;
+	}
+
+	// Il contrattacco esiste solo quando l'attaccante è uno Sniper
+	const bool bAttackerIsSniper = Attacker->IsA(ATBSSniper::StaticClass());
+	if (!bAttackerIsSniper)
+	{
+		return false;
+	}
+
+	// Se il difensore è uno Sniper, il contrattacco scatta sempre
+	if (Defender->IsA(ATBSSniper::StaticClass()))
+	{
+		return true;
+	}
+
+	// Se il difensore è un Brawler, il contrattacco scatta solo a distanza 1
+	if (Defender->IsA(ATBSBrawler::StaticClass()))
+	{
+		const int32 Distance =
+			FMath::Abs(Defender->GridX - Attacker->GridX) +
+			FMath::Abs(Defender->GridY - Attacker->GridY);
+
+		return Distance == 1;
+	}
+
+	return false;
 }

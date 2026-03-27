@@ -165,4 +165,7 @@ protected:
 
 	// Aggiorna il widget HUD se esiste
 	void RefreshHUD();
+
+	// Controlla se dopo un attacco dello Sniper deve scattare il contrattacco
+	bool ShouldTriggerCounterattack(class ATBSUnit* Attacker, class ATBSUnit* Defender) const;
 };
