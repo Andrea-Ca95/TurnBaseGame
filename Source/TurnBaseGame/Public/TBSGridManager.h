@@ -159,4 +159,10 @@ public:
 
 	// Conta quante unità AI sono nella zona di cattura di una torre
 	int32 CountAIUnitsInTowerZone(class ATBSTower* Tower) const;
+
+	// Restituisce la cella alle coordinate richieste
+	ATBSCell* GetCellAtCoordinates(int32 X, int32 Y) const;
+
+	// Gestisce il respawn di una unità eliminata nella sua posizione originaria
+	void HandleUnitRespawn(ATBSUnit* Unit);
 };

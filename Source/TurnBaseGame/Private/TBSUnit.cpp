@@ -70,6 +70,9 @@ ATBSUnit::ATBSUnit()
 
 	// All'inizio l'unità non si sta muovendo
 	bIsMoving = false;
+
+	OriginalGridX = 0;
+	OriginalGridY = 0;
 }
 
 // Funzione chiamata quando l'unità entra nel mondo di gioco
@@ -212,7 +215,6 @@ void ATBSUnit::ReceiveDamage(int32 DamageAmount)
 	if (CurrentHealth <= 0)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Unita eliminata."));
-		Destroy();
 	}
 }
 
@@ -281,4 +283,40 @@ int32 ATBSUnit::GetCurrentHealth() const
 int32 ATBSUnit::GetMaxHealth() const
 {
 	return MaxHealth;
+}
+
+// Restituisce la posizione di spawn originaria dell'unità
+void ATBSUnit::SetOriginalSpawnPosition(int32 InOriginalGridX, int32 InOriginalGridY)
+{
+	// Salvo la posizione originaria dell'unità per il futuro respawn
+	OriginalGridX = InOriginalGridX;
+	OriginalGridY = InOriginalGridY;
+}
+
+// Rignera completamente l'unità e la riporta alla cella di spawn originaria
+void ATBSUnit::RespawnToOriginalCell(const FVector& RespawnWorldLocation)
+{
+	// Ripristino completamente gli HP
+	CurrentHealth = MaxHealth;
+
+	// Resetto lo stato del turno
+	ResetTurnState();
+
+	// L'unità non deve risultare selezionata
+	SetSelected(false);
+
+	// Interrompo eventuale movimento residuo
+	bIsMoving = false;
+	MovementPath.Empty();
+	CurrentPathIndex = 0;
+
+	// Riporto le coordinate logiche alla cella originaria
+	GridX = OriginalGridX;
+	GridY = OriginalGridY;
+
+	// Riporto fisicamente l'unità nella posizione originaria
+	SetActorLocation(RespawnWorldLocation);
+
+	UE_LOG(LogTemp, Warning, TEXT("Unita respawnata in posizione originaria -> X: %d | Y: %d | HP: %d"),
+		GridX, GridY, CurrentHealth);
 }

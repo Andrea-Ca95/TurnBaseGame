@@ -17,6 +17,7 @@ public:
 	// Costruttore dell'unità
 	ATBSUnit();
 
+
 protected:
 	// Funzione chiamata quando l'unità entra nel mondo
 	virtual void BeginPlay() override;
@@ -140,4 +141,18 @@ public:
 
 	// Controlla se l'unità ha finito il turno
 	bool HasFinishedTurn() const;
+
+	// Coordinate originarie dell'unità scelte allo spawn iniziale
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Respawn")
+	int32 OriginalGridX;
+
+	// Coordinate originarie dell'unità scelte allo spawn iniziale
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Respawn")
+	int32 OriginalGridY;
+
+	// Salva la posizione originaria dell'unità
+	void SetOriginalSpawnPosition(int32 InOriginalGridX, int32 InOriginalGridY);
+
+	// Ripristina completamente l'unità dopo l'eliminazione
+	void RespawnToOriginalCell(const FVector& RespawnWorldLocation);
 };

@@ -465,14 +465,23 @@ void ATBSGridManager::SpawnInitialUnits()
 		ATBSSniper* HumanSniper = GetWorld()->SpawnActor<ATBSSniper>(SniperClass, SpawnLocation, FRotator::ZeroRotator);
 		if (HumanSniper)
 		{
+			// Salvo la posizione attuale iniziale sulla griglia
 			HumanSniper->GridX = HumanSniperCell->GridX;
 			HumanSniper->GridY = HumanSniperCell->GridY;
+
+			// Salvo anche la posizione originaria, che servirà per il respawn
+			HumanSniper->SetOriginalSpawnPosition(HumanSniperCell->GridX, HumanSniperCell->GridY);
+
 			// Assegno il materiale del team umano
 			if (HumanUnitMaterial && HumanSniper->UnitMesh)
 			{
 				HumanSniper->UnitMesh->SetMaterial(0, HumanUnitMaterial);
 			}
+
+			// Aggiungo l'unità all'array delle unità umane
 			HumanUnits.Add(HumanSniper);
+
+			// Riservo la cella per evitare overlap con altre unità
 			ReservedCells.Add(HumanSniperCell);
 		}
 	}
@@ -480,22 +489,28 @@ void ATBSGridManager::SpawnInitialUnits()
 	// --- HUMAN BRAWLER ---
 	ATBSCell* HumanBrawlerCell = FindRandomValidHumanSpawnCell(ReservedCells);
 
-	if (HumanBrawlerCell)
-	{
-		FVector SpawnLocation = HumanBrawlerCell->GetActorLocation();
-		SpawnLocation.Z += 60.0f;
+	if (HumanBrawlerCell) {
+		FVector SpawnLocation = HumanBrawlerCell->GetActorLocation(); SpawnLocation.Z += 60.0f; ATBSBrawler* HumanBrawler = GetWorld()->SpawnActor<ATBSBrawler>(BrawlerClass, SpawnLocation, FRotator::ZeroRotator);
 
-		ATBSBrawler* HumanBrawler = GetWorld()->SpawnActor<ATBSBrawler>(BrawlerClass, SpawnLocation, FRotator::ZeroRotator);
 		if (HumanBrawler)
 		{
+			// Salvo la posizione attuale iniziale sulla griglia
 			HumanBrawler->GridX = HumanBrawlerCell->GridX;
 			HumanBrawler->GridY = HumanBrawlerCell->GridY;
+
+			// Salvo anche la posizione originaria, che servirà per il respawn
+			HumanBrawler->SetOriginalSpawnPosition(HumanBrawlerCell->GridX, HumanBrawlerCell->GridY);
+
 			// Assegno il materiale del team umano
 			if (HumanUnitMaterial && HumanBrawler->UnitMesh)
 			{
 				HumanBrawler->UnitMesh->SetMaterial(0, HumanUnitMaterial);
 			}
+
+			// Aggiungo l'unità all'array delle unità umane
 			HumanUnits.Add(HumanBrawler);
+
+			// Riservo la cella per evitare overlap con altre unità
 			ReservedCells.Add(HumanBrawlerCell);
 		}
 	}
@@ -510,14 +525,23 @@ void ATBSGridManager::SpawnInitialUnits()
 		ATBSSniper* AISniper = GetWorld()->SpawnActor<ATBSSniper>(SniperClass, SpawnLocation, FRotator::ZeroRotator);
 		if (AISniper)
 		{
+			// Salvo la posizione attuale iniziale sulla griglia
 			AISniper->GridX = AISniperCell->GridX;
 			AISniper->GridY = AISniperCell->GridY;
+
+			// Salvo anche la posizione originaria, che servirà per il respawn
+			AISniper->SetOriginalSpawnPosition(AISniperCell->GridX, AISniperCell->GridY);
+
 			// Assegno il materiale del team AI
 			if (AIUnitMaterial && AISniper->UnitMesh)
 			{
 				AISniper->UnitMesh->SetMaterial(0, AIUnitMaterial);
 			}
+
+			// Aggiungo l'unità all'array delle unità AI
 			AIUnits.Add(AISniper);
+
+			// Riservo la cella per evitare overlap con altre unità
 			ReservedCells.Add(AISniperCell);
 		}
 	}
@@ -532,14 +556,23 @@ void ATBSGridManager::SpawnInitialUnits()
 		ATBSBrawler* AIBrawler = GetWorld()->SpawnActor<ATBSBrawler>(BrawlerClass, SpawnLocation, FRotator::ZeroRotator);
 		if (AIBrawler)
 		{
+			// Salvo la posizione attuale iniziale sulla griglia
 			AIBrawler->GridX = AIBrawlerCell->GridX;
 			AIBrawler->GridY = AIBrawlerCell->GridY;
+
+			// Salvo anche la posizione originaria, che servirà per il respawn
+			AIBrawler->SetOriginalSpawnPosition(AIBrawlerCell->GridX, AIBrawlerCell->GridY);
+
 			// Assegno il materiale del team AI
 			if (AIUnitMaterial && AIBrawler->UnitMesh)
 			{
 				AIBrawler->UnitMesh->SetMaterial(0, AIUnitMaterial);
 			}
+
+			// Aggiungo l'unità all'array delle unità AI
 			AIUnits.Add(AIBrawler);
+
+			// Riservo la cella per evitare overlap con altre unità
 			ReservedCells.Add(AIBrawlerCell);
 		}
 	}
@@ -667,4 +700,50 @@ void ATBSGridManager::CleanupDestroyedUnits()
 	}
 
 	UE_LOG(LogTemp, Warning, TEXT("Cleanup unita -> Human: %d | AI: %d"), HumanUnits.Num(), AIUnits.Num());
+}
+
+// Restituisce una cella in base alle coordinate logiche X e Y
+ATBSCell* ATBSGridManager::GetCellAtCoordinates(int32 X, int32 Y) const
+{
+	for (ATBSCell* Cell : SpawnedCells)
+	{
+		if (!IsValid(Cell))
+		{
+			continue;
+		}
+
+		if (Cell->GridX == X && Cell->GridY == Y)
+		{
+			return Cell;
+		}
+	}
+
+	return nullptr;
+}
+
+// Gestisce il respawn di un'unità nella sua cella originaria
+void ATBSGridManager::HandleUnitRespawn(ATBSUnit* Unit)
+{
+	// Se il riferimento non è valido, esco
+	if (!IsValid(Unit))
+	{
+		return;
+	}
+
+	// Recupero la cella originaria salvata nell'unità
+	ATBSCell* OriginalCell = GetCellAtCoordinates(Unit->OriginalGridX, Unit->OriginalGridY);
+
+	// Se la cella originaria non esiste, segnalo il problema
+	if (!IsValid(OriginalCell))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Respawn fallito: cella originaria non trovata per unita."));
+		return;
+	}
+
+	// Calcolo la posizione mondo della cella originaria
+	FVector RespawnLocation = OriginalCell->GetActorLocation();
+	RespawnLocation.Z += 60.0f;
+
+	// Ripristino l'unità nella sua posizione originaria
+	Unit->RespawnToOriginalCell(RespawnLocation);
 }

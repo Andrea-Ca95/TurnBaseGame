@@ -292,6 +292,12 @@ void ATBSPlayerController::OnLeftMouseClick()
 				// Applico il danno al bersaglio
 				ClickedUnit->ReceiveDamage(DamageDealt);
 
+				// Controllo se il bersaglio è morto dopo l'attacco
+				if (ClickedUnit->IsDead())
+				{
+					GridManager->HandleUnitRespawn(ClickedUnit);
+				}
+
 				// Controllo se il difensore può infliggere un contrattacco
 				if (ShouldTriggerCounterattack(CurrentlySelectedUnit, ClickedUnit))
 				{
@@ -300,6 +306,12 @@ void ATBSPlayerController::OnLeftMouseClick()
 
 					// Applico il danno da contrattacco all'attaccante
 					CurrentlySelectedUnit->ReceiveDamage(CounterDamage);
+
+					// Controllo se l'attaccante è morto dopo il contrattacco
+					if (CurrentlySelectedUnit->IsDead())
+					{
+						GridManager->HandleUnitRespawn(CurrentlySelectedUnit);
+					}
 
 					UE_LOG(LogTemp, Warning, TEXT("Contrattacco subito -> danno ricevuto = %d"), CounterDamage);
 				}
@@ -1214,6 +1226,13 @@ void ATBSPlayerController::ExecuteSingleAIUnitTurn(ATBSUnit* AIUnit)
 		const int32 DamageDealt = AIUnit->RollDamage();
 		HumanTarget->ReceiveDamage(DamageDealt);
 
+		// Se il bersaglio umano è morto, lo respawno subito nella sua posizione originaria
+		ATBSGridManager* GridManager = GetGridManager();
+		if (GridManager && HumanTarget->IsDead())
+		{
+			GridManager->HandleUnitRespawn(HumanTarget);
+		}
+
 		// Controllo se il bersaglio umano può infliggere un contrattacco
 		if (ShouldTriggerCounterattack(AIUnit, HumanTarget))
 		{
@@ -1223,10 +1242,15 @@ void ATBSPlayerController::ExecuteSingleAIUnitTurn(ATBSUnit* AIUnit)
 			// Applico il danno da contrattacco all'attaccante AI
 			AIUnit->ReceiveDamage(CounterDamage);
 
+			// Se l'unità AI è morta per il contrattacco, la respawno subito nella sua posizione originaria
+			if (GridManager && AIUnit->IsDead())
+			{
+				GridManager->HandleUnitRespawn(AIUnit);
+			}
+
 			UE_LOG(LogTemp, Warning, TEXT("AI subisce contrattacco -> danno ricevuto = %d"), CounterDamage);
 		}
 
-		ATBSGridManager* GridManager = GetGridManager();
 		if (GridManager)
 		{
 			GridManager->CleanupDestroyedUnits();
@@ -1290,6 +1314,13 @@ void ATBSPlayerController::ExecuteSingleAIUnitTurn(ATBSUnit* AIUnit)
 		const int32 DamageDealt = AIUnit->RollDamage();
 		HumanTarget->ReceiveDamage(DamageDealt);
 
+		// Se il bersaglio umano è morto, lo respawno subito nella sua posizione originaria
+		ATBSGridManager* GridManager = GetGridManager();
+		if (GridManager && HumanTarget->IsDead())
+		{
+			GridManager->HandleUnitRespawn(HumanTarget);
+		}
+
 		// Controllo se il bersaglio umano può infliggere un contrattacco
 		if (ShouldTriggerCounterattack(AIUnit, HumanTarget))
 		{
@@ -1299,10 +1330,15 @@ void ATBSPlayerController::ExecuteSingleAIUnitTurn(ATBSUnit* AIUnit)
 			// Applico il danno da contrattacco all'attaccante AI
 			AIUnit->ReceiveDamage(CounterDamage);
 
+			// Se l'unità AI è morta per il contrattacco, la respawno subito nella sua posizione originaria
+			if (GridManager && AIUnit->IsDead())
+			{
+				GridManager->HandleUnitRespawn(AIUnit);
+			}
+
 			UE_LOG(LogTemp, Warning, TEXT("AI subisce contrattacco -> danno ricevuto = %d"), CounterDamage);
 		}
 
-		ATBSGridManager* GridManager = GetGridManager();
 		if (GridManager)
 		{
 			GridManager->CleanupDestroyedUnits();
