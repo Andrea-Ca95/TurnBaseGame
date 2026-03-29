@@ -126,6 +126,22 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tower")
 	TSubclassOf<ATBSTower> TowerClass;
 
+	// Materiale torre neutrale
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tower Materials")
+	UMaterialInterface* TowerNeutralMaterial;
+
+	// Materiale torre contesa
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tower Materials")
+	UMaterialInterface* TowerContestedMaterial;
+
+	// Materiale torre controllata dal player umano
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tower Materials")
+	UMaterialInterface* TowerHumanControlledMaterial;
+
+	// Materiale torre controllata dalla AI
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tower Materials")
+	UMaterialInterface* TowerAIControlledMaterial;
+
 	// Seed casuale usato per generare la mappa
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Map Generation")
 	int32 MapSeed;

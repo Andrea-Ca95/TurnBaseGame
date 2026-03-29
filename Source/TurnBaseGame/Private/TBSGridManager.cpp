@@ -30,6 +30,10 @@ ATBSGridManager::ATBSGridManager()
 	Level3Material = nullptr;
 	Level4Material = nullptr;
 	AttackRangeCellMaterial = nullptr;
+	TowerNeutralMaterial = nullptr;
+	TowerContestedMaterial = nullptr;
+	TowerHumanControlledMaterial = nullptr;
+	TowerAIControlledMaterial = nullptr;
 
 	// All'inizio i materiali delle unità non sono assegnati
 	HumanUnitMaterial = nullptr;
@@ -321,6 +325,15 @@ void ATBSGridManager::SpawnTowers()
 		{
 			NewTower->GridX = TowerCell->GridX;
 			NewTower->GridY = TowerCell->GridY;
+
+			// Passo alla torre i materiali configurati nel GridManager
+			NewTower->NeutralMaterial = TowerNeutralMaterial;
+			NewTower->ContestedMaterial = TowerContestedMaterial;
+			NewTower->HumanControlledMaterial = TowerHumanControlledMaterial;
+			NewTower->AIControlledMaterial = TowerAIControlledMaterial;
+
+			// Aggiorno subito l'aspetto visivo iniziale della torre
+			NewTower->UpdateTowerVisual();
 
 			SpawnedTowers.Add(NewTower);
 
@@ -685,6 +698,7 @@ ATBSUnit* ATBSGridManager::SpawnUnitAtCell(ETBSPlayerOwner PlayerOwner, ETBSUnit
 // Conta quante unità umane sono nella zona di cattura di una torre
 int32 ATBSGridManager::CountHumanUnitsInTowerZone(ATBSTower* Tower) const
 {
+	// Se la torre non è valida, ritorno 0
 	if (!Tower)
 	{
 		return 0;
@@ -694,16 +708,18 @@ int32 ATBSGridManager::CountHumanUnitsInTowerZone(ATBSTower* Tower) const
 
 	for (ATBSUnit* Unit : HumanUnits)
 	{
+		// Se l'unità non è valida, la salto
 		if (!IsValid(Unit))
 		{
 			continue;
 		}
 
-		// Distanza "anche in diagonale" -> Chebyshev distance
+		// Calcolo la distanza di Chebyshev rispetto alla torre
 		const int32 DeltaX = FMath::Abs(Unit->GridX - Tower->GridX);
 		const int32 DeltaY = FMath::Abs(Unit->GridY - Tower->GridY);
 		const int32 Distance = FMath::Max(DeltaX, DeltaY);
 
+		// Se l'unità è dentro la zona 5x5, la conto
 		if (Distance <= 2)
 		{
 			Count++;
@@ -716,6 +732,7 @@ int32 ATBSGridManager::CountHumanUnitsInTowerZone(ATBSTower* Tower) const
 // Conta quante unità AI sono nella zona di cattura di una torre
 int32 ATBSGridManager::CountAIUnitsInTowerZone(ATBSTower* Tower) const
 {
+	// Se la torre non è valida, ritorno 0
 	if (!Tower)
 	{
 		return 0;
@@ -725,16 +742,18 @@ int32 ATBSGridManager::CountAIUnitsInTowerZone(ATBSTower* Tower) const
 
 	for (ATBSUnit* Unit : AIUnits)
 	{
+		// Se l'unità non è valida, la salto
 		if (!IsValid(Unit))
 		{
 			continue;
 		}
 
-		// Distanza "anche in diagonale" -> Chebyshev distance
+		// Calcolo la distanza di Chebyshev rispetto alla torre
 		const int32 DeltaX = FMath::Abs(Unit->GridX - Tower->GridX);
 		const int32 DeltaY = FMath::Abs(Unit->GridY - Tower->GridY);
 		const int32 Distance = FMath::Max(DeltaX, DeltaY);
 
+		// Se l'unità è dentro la zona 5x5, la conto
 		if (Distance <= 2)
 		{
 			Count++;
@@ -749,11 +768,13 @@ void ATBSGridManager::UpdateTowerControlStates()
 {
 	for (ATBSTower* Tower : SpawnedTowers)
 	{
+		// Se la torre non è valida, la salto
 		if (!IsValid(Tower))
 		{
 			continue;
 		}
 
+		// Calcolo quante unità umane e AI risultano dentro la zona di cattura
 		const int32 HumanCount = CountHumanUnitsInTowerZone(Tower);
 		const int32 AICount = CountAIUnitsInTowerZone(Tower);
 
@@ -800,8 +821,6 @@ void ATBSGridManager::CleanupDestroyedUnits()
 			AIUnits.RemoveAt(i);
 		}
 	}
-
-	UE_LOG(LogTemp, Warning, TEXT("Cleanup unita -> Human: %d | AI: %d"), HumanUnits.Num(), AIUnits.Num());
 }
 
 // Restituisce una cella in base alle coordinate logiche X e Y
