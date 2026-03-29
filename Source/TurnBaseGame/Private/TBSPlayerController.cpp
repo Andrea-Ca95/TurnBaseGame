@@ -3,6 +3,7 @@
 #include "UObject/ConstructorHelpers.h"
 #include "Blueprint/UserWidget.h"
 #include "Containers/Map.h"
+#include "TimerManager.h"
 #include "TBSGridManager.h"
 #include "TBSCell.h"
 #include "TBSUnit.h"
@@ -33,6 +34,12 @@ ATBSPlayerController::ATBSPlayerController()
 
 	// All'inizio la partita non è finita
 	bGameEnded = false;
+
+	// All'inizio il vincitore del lancio non è ancora stato deciso
+	bHumanStartsFirst = false;
+
+	// All'inizio il lancio della moneta non è ancora stato eseguito
+	bInitialCoinTossDone = false;
 
 	// All'inizio nessuna cella è selezionata
 	CurrentlySelectedCell = nullptr;
@@ -80,8 +87,11 @@ void ATBSPlayerController::BeginPlay()
 		}
 	}
 
-	// Avvio esplicitamente il primo turno umano
-	StartHumanTurn();
+	// Eseguo il lancio iniziale della moneta per decidere chi avrà priorità
+	PerformInitialCoinToss();
+
+	// Avvio la fase iniziale di piazzamento alternato delle unità
+	StartDeploymentPhase();
 
 	// Scrivo nel log le informazioni iniziali di stato gioco
 	UE_LOG(LogTemp, Warning, TEXT("Turno corrente: %s"), *GetCurrentTurnText());
@@ -151,6 +161,30 @@ void ATBSPlayerController::OnLeftMouseClick()
 	}
 
 	FHitResult HitResult;
+
+	// Se siamo nella fase di piazzamento iniziale, gestisco il click in modo separato
+	if (CurrentMatchPhase == ETBSMatchPhase::Deployment)
+	{
+		// Faccio un raycast sotto il cursore del mouse
+		const bool bHit = GetHitResultUnderCursor(ECC_Visibility, false, HitResult);
+
+		// Se non colpisco nulla o non c'è un attore valido, esco
+		if (!bHit || !HitResult.GetActor())
+		{
+			return;
+		}
+
+		// Durante il piazzamento considero solo il click sulle celle
+		ATBSCell* ClickedCell = Cast<ATBSCell>(HitResult.GetActor());
+		if (!ClickedCell)
+		{
+			return;
+		}
+
+		// Gestisco il piazzamento sulla cella cliccata
+		HandleDeploymentClick(ClickedCell);
+		return;
+	}
 
 	// Se non è il turno umano, ignoro l'input del player
 	if (CurrentTurnState != ETBSTurnState::Human)
@@ -1023,8 +1057,67 @@ void ATBSPlayerController::StartAITurn()
 		return;
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("Turno AI concluso."));
-	StartHumanTurn();
+	// Avvio un controllo periodico per aspettare la fine reale dei movimenti AI
+	GetWorldTimerManager().SetTimer(
+		AITurnEndCheckTimer,
+		this,
+		&ATBSPlayerController::CheckEndOfAITurn,
+		0.1f,
+		true
+	);
+
+	// Scrivo nel log che il turno AI è stato eseguito e ora attendo la fine visiva dei movimenti
+	UE_LOG(LogTemp, Warning, TEXT("Turno AI eseguito: attendo la fine reale dei movimenti prima di passare a HUMAN."));
+}
+
+// Esegue il lancio della moneta iniziale e decide chi inizia
+void ATBSPlayerController::PerformInitialCoinToss()
+{
+	// Se il lancio è già stato eseguito, non lo rifaccio
+	if (bInitialCoinTossDone)
+	{
+		return;
+	}
+
+	// Simulo il lancio della moneta:
+	// true = parte il player umano
+	// false = parte la AI
+	bHumanStartsFirst = FMath::RandBool();
+
+	// Segno che il lancio iniziale è stato eseguito
+	bInitialCoinTossDone = true;
+
+	// Scrivo nel log il risultato del lancio
+	if (bHumanStartsFirst)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Lancio della moneta: vince HUMAN, inizia il player umano."));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Lancio della moneta: vince AI, inizia la AI."));
+	}
+}
+
+// Avvia il primo turno in base al risultato del lancio iniziale
+void ATBSPlayerController::StartFirstTurnFromCoinToss()
+{
+	// Se il lancio non è ancora stato eseguito, per sicurezza esco
+	if (!bInitialCoinTossDone)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Impossibile avviare il primo turno: lancio iniziale non eseguito."));
+		return;
+	}
+
+	// Se ha vinto il player umano, avvio il turno umano
+	if (bHumanStartsFirst)
+	{
+		StartHumanTurn();
+	}
+	else
+	{
+		// Altrimenti avvio il turno AI
+		StartAITurn();
+	}
 }
 
 // Controlla se tutte le unità umane hanno concluso il turno
@@ -1045,6 +1138,60 @@ bool ATBSPlayerController::HaveAllHumanUnitsFinishedTurn() const
 	}
 
 	return true;
+}
+
+// Controlla periodicamente se il turno AI può terminare davvero
+void ATBSPlayerController::CheckEndOfAITurn()
+{
+	// Se la partita è finita, fermo il timer e non faccio altro
+	if (bGameEnded)
+	{
+		GetWorldTimerManager().ClearTimer(AITurnEndCheckTimer);
+		return;
+	}
+
+	// Se almeno una unità AI si sta ancora muovendo, aspetto ancora
+	if (AreAnyAIUnitsMoving())
+	{
+		return;
+	}
+
+	// Se siamo qui, il movimento visivo della AI è davvero terminato
+	GetWorldTimerManager().ClearTimer(AITurnEndCheckTimer);
+
+	UE_LOG(LogTemp, Warning, TEXT("Turno AI concluso realmente. Passo al turno HUMAN."));
+
+	// Solo ora passo davvero al turno umano
+	StartHumanTurn();
+}
+
+// Controlla se almeno una unità AI si sta ancora muovendo
+bool ATBSPlayerController::AreAnyAIUnitsMoving() const
+{
+	// Recupero il GridManager dal livello
+	ATBSGridManager* GridManager = GetGridManager();
+	if (!GridManager)
+	{
+		return false;
+	}
+
+	// Controllo tutte le unità AI attive
+	for (ATBSUnit* Unit : GridManager->AIUnits)
+	{
+		if (!IsValid(Unit))
+		{
+			continue;
+		}
+
+		// Se almeno una unità si sta ancora muovendo, il turno AI non è finito davvero
+		if (Unit->IsMoving())
+		{
+			return true;
+		}
+	}
+
+	// Nessuna unità AI si sta muovendo
+	return false;
 }
 
 // Conta quante torri sono controllate dal player umano
@@ -1679,4 +1826,300 @@ bool ATBSPlayerController::ShouldTriggerCounterattack(ATBSUnit* Attacker, ATBSUn
 	}
 
 	return false;
+}
+
+// Avvia la fase di piazzamento iniziale delle unità
+void ATBSPlayerController::StartDeploymentPhase()
+{
+	// Imposto la partita nella fase di piazzamento iniziale
+	CurrentMatchPhase = ETBSMatchPhase::Deployment;
+
+	// All'inizio del piazzamento azzero i contatori delle unità già piazzate
+	HumanPlacedUnitsCount = 0;
+	AIPlacedUnitsCount = 0;
+
+	// Il primo a piazzare è il vincitore del lancio della moneta
+	CurrentDeploymentOwner = bHumanStartsFirst ? ETBSPlayerOwner::Human : ETBSPlayerOwner::AI;
+
+	UE_LOG(LogTemp, Warning, TEXT("=== FASE DI PIAZZAMENTO INIZIALE ==="));
+
+	if (CurrentDeploymentOwner == ETBSPlayerOwner::Human)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Piazza per primo HUMAN."));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Piazza per primo AI."));
+
+		// Se parte la AI, la faccio piazzare subito una volta senza cambiare owner prima
+		ATBSGridManager* GridManager = GetGridManager();
+		if (!GridManager)
+		{
+			return;
+		}
+
+		// Raccolgo tutte le celle valide per il piazzamento AI
+		TArray<ATBSCell*> ValidAICells;
+
+		for (ATBSCell* Cell : GridManager->SpawnedCells)
+		{
+			if (!IsValid(Cell))
+			{
+				continue;
+			}
+
+			// Tengo solo le celle valide per il deployment AI
+			if (IsValidDeploymentCell(Cell, ETBSPlayerOwner::AI))
+			{
+				ValidAICells.Add(Cell);
+			}
+		}
+
+		// Se non trovo celle valide, esco
+		if (ValidAICells.Num() == 0)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Nessuna cella valida disponibile per il primo piazzamento AI."));
+			return;
+		}
+
+		// Scelgo una cella casuale valida
+		const int32 RandomIndex = FMath::RandRange(0, ValidAICells.Num() - 1);
+		ATBSCell* ChosenCell = ValidAICells[RandomIndex];
+
+		// Piazza davvero la prima unità AI
+		PlaceNextDeploymentUnit(ETBSPlayerOwner::AI, ChosenCell);
+
+		// Dopo il primo piazzamento AI, passo al prossimo piazzamento
+		AdvanceDeploymentTurn();
+	}
+}
+
+// Gestisce il click su una cella durante la fase di piazzamento
+void ATBSPlayerController::HandleDeploymentClick(ATBSCell* ClickedCell)
+{
+	// Durante il deployment il player umano può cliccare solo quando tocca a lui
+	if (CurrentDeploymentOwner != ETBSPlayerOwner::Human)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Non e il turno di piazzamento HUMAN."));
+		return;
+	}
+
+	// Verifico che la cella cliccata sia valida per il piazzamento umano
+	if (!IsValidDeploymentCell(ClickedCell, ETBSPlayerOwner::Human))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Cella non valida per il piazzamento HUMAN."));
+		return;
+	}
+
+	// Evidenzio la cella cliccata come feedback visivo
+	if (CurrentlySelectedCell && CurrentlySelectedCell != ClickedCell)
+	{
+		CurrentlySelectedCell->SetSelected(false);
+	}
+
+	CurrentlySelectedCell = ClickedCell;
+	CurrentlySelectedCell->SetSelected(true);
+
+	// Piazza la prossima unità umana prevista nella cella scelta
+	PlaceNextDeploymentUnit(ETBSPlayerOwner::Human, ClickedCell);
+
+	// Tolgo la selezione visiva della cella dopo il piazzamento
+	CurrentlySelectedCell->SetSelected(false);
+	CurrentlySelectedCell = nullptr;
+
+	// Aggiorno la HUD dopo il piazzamento
+	RefreshHUD();
+
+	// Passo al prossimo piazzamento
+	AdvanceDeploymentTurn();
+}
+
+// Controlla se una cella è valida per il piazzamento del player indicato
+bool ATBSPlayerController::IsValidDeploymentCell(ATBSCell* Cell, ETBSPlayerOwner PlayerOwner) const
+{
+	// Se la cella non è valida, non posso piazzare
+	if (!IsValid(Cell))
+	{
+		return false;
+	}
+
+	// Recupero il GridManager
+	ATBSGridManager* GridManager = GetGridManager();
+	if (!GridManager)
+	{
+		return false;
+	}
+
+	// La cella deve essere attraversabile
+	if (!Cell->bIsWalkable)
+	{
+		return false;
+	}
+
+	// La cella non deve essere già occupata
+	if (GridManager->IsCellOccupiedByAnyUnit(Cell->GridX, Cell->GridY))
+	{
+		return false;
+	}
+
+	// Celle valide per HUMAN: prime 3 righe
+	if (PlayerOwner == ETBSPlayerOwner::Human)
+	{
+		return Cell->GridY >= 0 && Cell->GridY <= 2;
+	}
+
+	// Celle valide per AI: ultime 3 righe
+	if (PlayerOwner == ETBSPlayerOwner::AI)
+	{
+		return Cell->GridY >= 22 && Cell->GridY <= 24;
+	}
+
+	return false;
+}
+
+// Piazza la prossima unità prevista per il player indicato nella cella scelta
+void ATBSPlayerController::PlaceNextDeploymentUnit(ETBSPlayerOwner PlayerOwner, ATBSCell* TargetCell)
+{
+	// Recupero il GridManager
+	ATBSGridManager* GridManager = GetGridManager();
+	if (!GridManager)
+	{
+		return;
+	}
+
+	// Determino quale tipo di unità piazzare in base a quante ne ha già piazzate il player
+	ETBSUnitType UnitTypeToSpawn = ETBSUnitType::Sniper;
+
+	// Se è HUMAN, la prima unità è Sniper, la seconda è Brawler
+	if (PlayerOwner == ETBSPlayerOwner::Human)
+	{
+		if (HumanPlacedUnitsCount == 0)
+		{
+			UnitTypeToSpawn = ETBSUnitType::Sniper;
+		}
+		else
+		{
+			UnitTypeToSpawn = ETBSUnitType::Brawler;
+		}
+	}
+	// Se è AI, la prima unità è Sniper, la seconda è Brawler
+	else if (PlayerOwner == ETBSPlayerOwner::AI)
+	{
+		if (AIPlacedUnitsCount == 0)
+		{
+			UnitTypeToSpawn = ETBSUnitType::Sniper;
+		}
+		else
+		{
+			UnitTypeToSpawn = ETBSUnitType::Brawler;
+		}
+	}
+
+	// Creo davvero l'unità sulla cella scelta
+	ATBSUnit* SpawnedUnit = GridManager->SpawnUnitAtCell(PlayerOwner, UnitTypeToSpawn, TargetCell);
+
+	// Se lo spawn è fallito, esco
+	if (!IsValid(SpawnedUnit))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Piazzamento fallito: impossibile creare l'unita."));
+		return;
+	}
+
+	// Aggiorno il conteggio delle unità piazzate
+	if (PlayerOwner == ETBSPlayerOwner::Human)
+	{
+		HumanPlacedUnitsCount++;
+	}
+	else if (PlayerOwner == ETBSPlayerOwner::AI)
+	{
+		AIPlacedUnitsCount++;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("Piazzamento completato -> Owner: %s | HumanPlaced=%d | AIPlaced=%d"),
+		PlayerOwner == ETBSPlayerOwner::Human ? TEXT("Human") : TEXT("AI"),
+		HumanPlacedUnitsCount,
+		AIPlacedUnitsCount);
+}
+
+// Controlla se la fase di piazzamento iniziale è terminata
+bool ATBSPlayerController::IsDeploymentComplete() const
+{
+	// Il piazzamento è completo quando HUMAN e AI hanno piazzato entrambe 2 unità
+	return HumanPlacedUnitsCount >= 2 && AIPlacedUnitsCount >= 2;
+}
+
+// Passa al prossimo player nella fase di piazzamento
+void ATBSPlayerController::AdvanceDeploymentTurn()
+{
+	// Se il piazzamento è finito, passo alla fase di gioco normale
+	if (IsDeploymentComplete())
+	{
+		// Entro nella fase normale di partita
+		CurrentMatchPhase = ETBSMatchPhase::Playing;
+
+		UE_LOG(LogTemp, Warning, TEXT("=== FASE DI PIAZZAMENTO COMPLETATA ==="));
+
+		// Dopo il piazzamento, inizia il vincitore del lancio iniziale
+		StartFirstTurnFromCoinToss();
+		return;
+	}
+
+	// Alterno il player che deve piazzare
+	if (CurrentDeploymentOwner == ETBSPlayerOwner::Human)
+	{
+		CurrentDeploymentOwner = ETBSPlayerOwner::AI;
+	}
+	else
+	{
+		CurrentDeploymentOwner = ETBSPlayerOwner::Human;
+	}
+
+	// Se tocca alla AI, piazzo automaticamente una unità in una cella valida casuale
+	if (CurrentDeploymentOwner == ETBSPlayerOwner::AI)
+	{
+		ATBSGridManager* GridManager = GetGridManager();
+		if (!GridManager)
+		{
+			return;
+		}
+
+		// Cerco una cella valida casuale nella zona AI che non sia già occupata
+		TArray<ATBSCell*> ValidAICells;
+
+		for (ATBSCell* Cell : GridManager->SpawnedCells)
+		{
+			if (!IsValid(Cell))
+			{
+				continue;
+			}
+
+			// Tengo solo le celle valide per il deployment AI
+			if (IsValidDeploymentCell(Cell, ETBSPlayerOwner::AI))
+			{
+				ValidAICells.Add(Cell);
+			}
+		}
+
+		// Se non trovo celle valide, esco
+		if (ValidAICells.Num() == 0)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Nessuna cella valida disponibile per il piazzamento AI."));
+			return;
+		}
+
+		// Scelgo una cella casuale valida
+		const int32 RandomIndex = FMath::RandRange(0, ValidAICells.Num() - 1);
+		ATBSCell* ChosenCell = ValidAICells[RandomIndex];
+
+		// Piazza la prossima unità AI nella cella scelta
+		PlaceNextDeploymentUnit(ETBSPlayerOwner::AI, ChosenCell);
+
+		// Dopo il piazzamento AI, richiamo di nuovo l'avanzamento
+		// così il turno di piazzamento torna al player umano oppure si chiude la fase
+		AdvanceDeploymentTurn();
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Ora deve piazzare HUMAN."));
+	}
 }

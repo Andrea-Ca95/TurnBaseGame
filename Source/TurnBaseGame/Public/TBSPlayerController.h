@@ -3,6 +3,7 @@
 // Include base di Unreal
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
+#include "TBSTower.h"
 #include "TBSPlayerController.generated.h"
 
 // Forward declarations per evitare include pesanti nell'header
@@ -14,6 +15,16 @@ enum class ETBSTurnState : uint8
 {
 	Human,
 	AI
+};
+
+UENUM()
+enum class ETBSMatchPhase : uint8
+{
+	// Fase iniziale di piazzamento alternato delle unità
+	Deployment,
+
+	// Fase normale di gioco con turni Human / AI
+	Playing
 };
 
 UCLASS()
@@ -107,11 +118,53 @@ protected:
 	// Stato corrente del turno di gioco
 	ETBSTurnState CurrentTurnState;
 
+	// Fase corrente della partita: piazzamento iniziale oppure gioco normale
+	ETBSMatchPhase CurrentMatchPhase;
+
+	// Indica di chi è il turno di piazzamento corrente
+	ETBSPlayerOwner CurrentDeploymentOwner;
+
+	// Numero di unità già piazzate dal player umano nella fase iniziale
+	int32 HumanPlacedUnitsCount;
+
+	// Numero di unità già piazzate dalla AI nella fase iniziale
+	int32 AIPlacedUnitsCount;
+
+	// Indica se il player umano ha vinto il lancio della moneta iniziale
+	bool bHumanStartsFirst;
+
+	// Indica se il lancio iniziale è già stato eseguito
+	bool bInitialCoinTossDone;
+
 	// Avvia il turno umano
 	void StartHumanTurn();
 
 	// Avvia il turno AI
 	void StartAITurn();
+
+	// Esegue il lancio della moneta iniziale e decide chi inizia
+	void PerformInitialCoinToss();
+
+	// Avvia il primo turno in base al risultato del lancio iniziale
+	void StartFirstTurnFromCoinToss();
+
+	// Avvia la fase di piazzamento iniziale delle unità
+	void StartDeploymentPhase();
+
+	// Gestisce il click su una cella durante la fase di piazzamento
+	void HandleDeploymentClick(class ATBSCell* ClickedCell);
+
+	// Controlla se una cella è valida per il piazzamento del player indicato
+	bool IsValidDeploymentCell(class ATBSCell* Cell, ETBSPlayerOwner PlayerOwner) const;
+
+	// Piazza la prossima unità prevista per il player indicato nella cella scelta
+	void PlaceNextDeploymentUnit(ETBSPlayerOwner PlayerOwner, class ATBSCell* TargetCell);
+
+	// Controlla se la fase di piazzamento iniziale è terminata
+	bool IsDeploymentComplete() const;
+
+	// Passa al prossimo player nella fase di piazzamento
+	void AdvanceDeploymentTurn();
 
 	// Controlla se tutte le unità umane hanno concluso il turno
 	bool HaveAllHumanUnitsFinishedTurn() const;
@@ -168,4 +221,13 @@ protected:
 
 	// Controlla se dopo un attacco dello Sniper deve scattare il contrattacco
 	bool ShouldTriggerCounterattack(class ATBSUnit* Attacker, class ATBSUnit* Defender) const;
+
+	// Controlla se almeno una unità AI si sta ancora muovendo
+	bool AreAnyAIUnitsMoving() const;
+
+	// Controlla periodicamente se il turno AI può terminare davvero
+	void CheckEndOfAITurn();
+
+	// Timer usato per controllare la fine reale del turno AI
+	FTimerHandle AITurnEndCheckTimer;
 };

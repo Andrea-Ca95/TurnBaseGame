@@ -13,6 +13,16 @@ class UMaterialInterface;
 class ATBSSniper;
 class ATBSBrawler;
 
+UENUM()
+enum class ETBSUnitType : uint8
+{
+	// Unità a distanza
+	Sniper,
+
+	// Unità da mischia
+	Brawler
+};
+
 UCLASS()
 class TURNBASEGAME_API ATBSGridManager : public AActor
 {
@@ -165,4 +175,10 @@ public:
 
 	// Gestisce il respawn di una unità eliminata nella sua posizione originaria
 	void HandleUnitRespawn(ATBSUnit* Unit);
+
+	// Crea una singola unità del tipo richiesto nella cella indicata per il player specificato
+	ATBSUnit* SpawnUnitAtCell(ETBSPlayerOwner PlayerOwner, ETBSUnitType UnitType, ATBSCell* TargetCell);
+
+	// Controlla se una cella è già occupata da una unità umana o AI
+	bool IsCellOccupiedByAnyUnit(int32 X, int32 Y) const;
 };

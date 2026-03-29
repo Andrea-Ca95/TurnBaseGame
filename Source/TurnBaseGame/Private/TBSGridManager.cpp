@@ -63,9 +63,6 @@ void ATBSGridManager::BeginPlay()
 
 	// Crea le torri dopo la generazione della mappa
 	SpawnTowers();
-
-	// Crea l'unità iniziale solo durante il gioco
-	SpawnInitialUnits();
 }
 
 void ATBSGridManager::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -580,6 +577,111 @@ void ATBSGridManager::SpawnInitialUnits()
 	UE_LOG(LogTemp, Warning, TEXT("Unita iniziali create: Human=%d | AI=%d"), HumanUnits.Num(), AIUnits.Num());
 }
 
+// Crea una singola unità del tipo richiesto nella cella indicata per il player specificato
+ATBSUnit* ATBSGridManager::SpawnUnitAtCell(ETBSPlayerOwner PlayerOwner, ETBSUnitType UnitType, ATBSCell* TargetCell)
+{
+	// Se la cella non è valida, blocco lo spawn
+	if (!IsValid(TargetCell))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SpawnUnitAtCell fallita: TargetCell non valida."));
+		return nullptr;
+	}
+
+	// La cella deve essere attraversabile
+	if (!TargetCell->bIsWalkable)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SpawnUnitAtCell fallita: cella non attraversabile."));
+		return nullptr;
+	}
+
+	// La cella non deve essere già occupata da altre unità
+	if (IsCellOccupiedByAnyUnit(TargetCell->GridX, TargetCell->GridY))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SpawnUnitAtCell fallita: cella gia occupata."));
+		return nullptr;
+	}
+
+	// Calcolo la posizione mondo di spawn sopra la cella
+	FVector SpawnLocation = TargetCell->GetActorLocation();
+	SpawnLocation.Z += 60.0f;
+
+	// Variabile che conterrà l'unità creata
+	ATBSUnit* SpawnedUnit = nullptr;
+
+	// Se devo creare uno Sniper
+	if (UnitType == ETBSUnitType::Sniper)
+	{
+		// Verifico che la classe Sniper sia valida
+		if (!SniperClass)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("SpawnUnitAtCell fallita: SniperClass non assegnata."));
+			return nullptr;
+		}
+
+		// Creo lo Sniper
+		SpawnedUnit = GetWorld()->SpawnActor<ATBSSniper>(SniperClass, SpawnLocation, FRotator::ZeroRotator);
+	}
+	// Se devo creare un Brawler
+	else if (UnitType == ETBSUnitType::Brawler)
+	{
+		// Verifico che la classe Brawler sia valida
+		if (!BrawlerClass)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("SpawnUnitAtCell fallita: BrawlerClass non assegnata."));
+			return nullptr;
+		}
+
+		// Creo il Brawler
+		SpawnedUnit = GetWorld()->SpawnActor<ATBSBrawler>(BrawlerClass, SpawnLocation, FRotator::ZeroRotator);
+	}
+
+	// Se lo spawn non è andato a buon fine, esco
+	if (!IsValid(SpawnedUnit))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SpawnUnitAtCell fallita: impossibile creare l'unita."));
+		return nullptr;
+	}
+
+	// Salvo le coordinate logiche dell'unità sulla griglia
+	SpawnedUnit->GridX = TargetCell->GridX;
+	SpawnedUnit->GridY = TargetCell->GridY;
+
+	// Salvo anche la posizione originaria, che servirà per il respawn
+	SpawnedUnit->SetOriginalSpawnPosition(TargetCell->GridX, TargetCell->GridY);
+
+	// Assegno il materiale corretto e aggiungo l'unità all'array giusto
+	if (PlayerOwner == ETBSPlayerOwner::Human)
+	{
+		// Assegno il materiale del team umano
+		if (HumanUnitMaterial && SpawnedUnit->UnitMesh)
+		{
+			SpawnedUnit->UnitMesh->SetMaterial(0, HumanUnitMaterial);
+		}
+
+		// Salvo l'unità nell'array delle unità umane
+		HumanUnits.Add(SpawnedUnit);
+	}
+	else if (PlayerOwner == ETBSPlayerOwner::AI)
+	{
+		// Assegno il materiale del team AI
+		if (AIUnitMaterial && SpawnedUnit->UnitMesh)
+		{
+			SpawnedUnit->UnitMesh->SetMaterial(0, AIUnitMaterial);
+		}
+
+		// Salvo l'unità nell'array delle unità AI
+		AIUnits.Add(SpawnedUnit);
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("Unita spawnata in deployment -> Owner: %s | Tipo: %s | X: %d | Y: %d"),
+		PlayerOwner == ETBSPlayerOwner::Human ? TEXT("Human") : TEXT("AI"),
+		UnitType == ETBSUnitType::Sniper ? TEXT("Sniper") : TEXT("Brawler"),
+		SpawnedUnit->GridX,
+		SpawnedUnit->GridY);
+
+	return SpawnedUnit;
+}
+
 // Conta quante unità umane sono nella zona di cattura di una torre
 int32 ATBSGridManager::CountHumanUnitsInTowerZone(ATBSTower* Tower) const
 {
@@ -746,4 +848,41 @@ void ATBSGridManager::HandleUnitRespawn(ATBSUnit* Unit)
 
 	// Ripristino l'unità nella sua posizione originaria
 	Unit->RespawnToOriginalCell(RespawnLocation);
+}
+
+// Controlla se una cella è già occupata da una unità umana o AI
+bool ATBSGridManager::IsCellOccupiedByAnyUnit(int32 X, int32 Y) const
+{
+	// Controllo tutte le unità umane
+	for (ATBSUnit* Unit : HumanUnits)
+	{
+		if (!IsValid(Unit))
+		{
+			continue;
+		}
+
+		// Se trovo una unità umana sulla cella richiesta, la cella è occupata
+		if (Unit->GridX == X && Unit->GridY == Y)
+		{
+			return true;
+		}
+	}
+
+	// Controllo tutte le unità AI
+	for (ATBSUnit* Unit : AIUnits)
+	{
+		if (!IsValid(Unit))
+		{
+			continue;
+		}
+
+		// Se trovo una unità AI sulla cella richiesta, la cella è occupata
+		if (Unit->GridX == X && Unit->GridY == Y)
+		{
+			return true;
+		}
+	}
+
+	// Nessuna unità occupa la cella
+	return false;
 }
